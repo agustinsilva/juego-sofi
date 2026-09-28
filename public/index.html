@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Juegos para Sofi (4 Años)</title>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
+</head>
+<body>
+    <button id="home-btn" class="hidden">🏠 Menú</button>
+
+    
+    <!-- MENÚ PRINCIPAL -->
+    <div id="menu-container" class="container container--home">
+        <h1 class="page-title">¡Hola Sofi!</h1>
+        <p class="menu-subtitle">¿A qué quieres jugar hoy?</p>
+        
+        <div id="home-ambient-layer"></div>
+        <div class="home-blobs"></div>
+        
+        <div class="home-guide">
+            <div id="home-guide-bubble" class="home-guide-bubble"></div>
+            <div class="home-guide-avatar">
+                <div id="home-guide-character" class="home-guide-character">
+                <img id="home-guide-image" class="home-guide-image" src="/assets/characters/sofi-guide/guide-normal.webp" alt="Gatito guía" />
+            </div>
+            </div>
+        </div>
+        
+        <div id="global-stars-counter" class="stars-pill">
+            <img src="/assets/icons/shared/icon-star.webp" alt="" aria-hidden="true" class="stars-pill__icon-image">
+            <span id="global-stars-text">0</span>
+        </div>
+        
+        <div class="menu-grid">
+            <button id="btn-game1" class="game-card ui-pressable game-card--differences">
+                <div class="game-card__visual">
+                    <img src="/assets/icons/games/icon-differences.webp" alt="" class="game-card__icon-image">
+                    <span class="game-card__decor game-card__decor--left">👀</span>
+                    <img src="/assets/icons/shared/icon-sparkle.webp" alt="" class="game-card__decor game-card__decor--right game-card__decor-image">
+                </div>
+                <span class="game-card__title">Diferencias</span>
+            </button>
+            <button id="btn-game2" class="game-card ui-pressable game-card--painting">
+                <div class="game-card__visual">
+                    <img src="/assets/icons/games/icon-painting.webp" alt="" class="game-card__icon-image">
+                    <img src="/assets/icons/shared/icon-rainbow.webp" alt="" class="game-card__decor game-card__decor--left game-card__decor-image">
+                    <img src="/assets/icons/shared/icon-flower.webp" alt="" class="game-card__decor game-card__decor--right game-card__decor-image">
+                </div>
+                <span class="game-card__title">Pintar</span>
+            </button>
+            <button id="btn-game3" class="game-card ui-pressable game-card--maze">
+                <div class="game-card__visual">
+                    <img src="/assets/icons/games/icon-maze.webp" alt="" class="game-card__icon-image">
+                    <span class="game-card__decor game-card__decor--left">🌿</span>
+                    <img src="/assets/icons/shared/icon-paw.webp" alt="" class="game-card__decor game-card__decor--right game-card__decor-image">
+                </div>
+                <span class="game-card__title">Laberinto</span>
+            </button>
+            <button id="btn-game4" class="game-card ui-pressable game-card--cat">
+                <div class="game-card__visual">
+                    <img src="/assets/icons/games/icon-cat.webp" alt="" class="game-card__icon-image">
+                    <img src="/assets/icons/shared/icon-heart.webp" alt="" class="game-card__decor game-card__decor--left game-card__decor-image">
+                    <span class="game-card__decor game-card__decor--right">🧶</span>
+                </div>
+                <span class="game-card__title">Mi Gatito</span>
+            </button>
+            <button id="btn-game5" class="game-card ui-pressable game-card--memory">
+                <div class="game-card__visual">
+                    <img src="/assets/icons/games/icon-memory.webp" alt="" class="game-card__icon-image">
+                    <img src="/assets/icons/shared/icon-star.webp" alt="" class="game-card__decor game-card__decor--left game-card__decor-image">
+                    <span class="game-card__decor game-card__decor--right">🧩</span>
+                </div>
+                <span class="game-card__title">Memoria</span>
+            </button>
+            <button id="btn-collection" class="game-card ui-pressable game-card--collection">
+                <div class="game-card__visual">
+                    <span class="game-card__icon">🎁</span>
+                    <img src="/assets/icons/shared/icon-star.webp" alt="" class="game-card__decor game-card__decor--left game-card__decor-image">
+                    <img src="/assets/icons/shared/icon-sparkle.webp" alt="" class="game-card__decor game-card__decor--right game-card__decor-image">
+                </div>
+                <span class="game-card__title">Mis Cosas</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- MIS COSAS (COLECCIÓN) -->
+    <div id="collection-container" class="container container--collection hidden menu-theme">
+        <header>
+            <h1 class="page-title">⭐ Las cosas de Sofi ⭐</h1>
+            <div id="collection-stars-counter" class="stars-pill">
+                <img src="/assets/icons/shared/icon-star.webp" alt="" aria-hidden="true" class="stars-pill__icon-image">
+                <span id="collection-stars-text">0</span>
+            </div>
+        </header>
+        <main>
+            <div id="stickers-grid" class="collection-grid">
+                <!-- Filled dynamically by script.js -->
+            </div>
+        </main>
+    </div>
+
+    <!-- JUEGO 1: DIFERENCIAS -->
+    <div id="game1-container" class="container game-view game-view--differences hidden">
+        <header>
+            <h1 id="level-title" class="game-header game-header--differences">🔍 Nivel 1</h1>
+        </header>
+        <main>
+            <!-- Phaser Game Container -->
+            <div id="diff-game-container"></div>
+            
+            <div id="end-screen-1" class="end-screen hidden">
+                <h2>¡Felicidades!</h2>
+                <p>¡Completaste todos los niveles!</p>
+                <button class="action-btn ui-pressable action-btn--differences" id="restart-btn-1">Jugar de nuevo</button>
+            </div>
+        </main>
+    </div>
+
+    <!-- SELECTOR DE DIBUJO (JUEGO 2) -->
+    <div id="drawing-selector-container" class="container container--collection hidden menu-theme">
+        <header>
+            <h1 class="page-title">🎨 ¿Qué pintamos hoy?</h1>
+        </header>
+        <main>
+            <div class="drawing-selection-grid" id="drawing-options">
+                <!-- Se llenan con JS -->
+            </div>
+        </main>
+    </div>
+
+    <!-- JUEGO 2: PINTAR -->
+    <div id="game2-container" class="container game-view game-view--painting hidden">
+        <header>
+            <h1 id="drawing-title" class="game-header game-header--painting">🎨 Pinta tu dibujo</h1>
+        </header>
+        <main class="drawing-main">
+            <!-- Wrapper Híbrido -->
+            <div id="painting-wrapper" style="width: 100%; max-width: 800px; margin: 0 auto; display: flex; flex-direction: column; gap: 15px; box-sizing: border-box;">
+                <!-- Selector de Modo -->
+                <div id="painting-mode-selector" style="display: flex; justify-content: center; gap: 10px; margin-bottom: 5px; width: 100%;">
+                    <button id="mode-free" class="tool-btn ui-pressable tool-btn--primary active" aria-pressed="true">🌈 Libre</button>
+                    <button id="mode-guided" class="tool-btn ui-pressable tool-btn--soft" aria-pressed="false">🎯 Guía</button>
+                </div>
+
+                <!-- Progreso y Ayuda -->
+                <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 0 5px; box-sizing: border-box;">
+                    <div id="painting-progress-container" style="flex-grow: 1; font-family: 'Nunito', sans-serif; font-weight: bold; font-size: 16px; color: #555; display: flex; align-items: center; gap: 8px;">
+                        🎨 <span id="painting-progress-bar" style="color: #ff9800; letter-spacing: 1px;"></span>
+                    </div>
+                    <button id="tool-help" class="tool-btn ui-pressable tool-btn--warning">✨ Ayuda</button>
+                </div>
+
+                <!-- Área del dibujo -->
+                <div id="drawing-area" style="position: relative; width: 100%; aspect-ratio: 1/1; overflow: hidden; border-radius: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); background: #ffffff; touch-action: none;">
+                    <!-- Phaser Layer para Sparkles y Audio -->
+                    <div id="painting-phaser-layer" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none;"></div>
+                    
+                    <!-- Transform Layer para Zoom y Pan -->
+                    <div id="painting-transform-layer" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 2; transform-origin: center center; display: flex; justify-content: center; align-items: center; padding: 5%; box-sizing: border-box; transition: transform 0.1s ease-out; pointer-events: auto;">
+                        <!-- El SVG interactivo se inyecta aquí desde game2.js -->
+                    </div>
+
+                    <!-- Reference Layer -->
+                    <div id="painting-reference-container" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 3; pointer-events: none; display: none;">
+                        <div id="reference-backdrop" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.25); display: none; pointer-events: auto; z-index: 20;"></div>
+                        <div id="reference-thumbnail" style="position: absolute; top: 15px; right: 15px; width: 80px; height: 80px; background: white; border-radius: 12px; border: 3px solid #ccc; box-shadow: 0 4px 6px rgba(0,0,0,0.2); pointer-events: auto; cursor: pointer; display: flex; justify-content: center; align-items: center; padding: 4px; box-sizing: border-box; z-index: 3; overflow: hidden;"></div>
+                        <div id="reference-expanded" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 85%; max-width: 400px; aspect-ratio: 1/1; background: white; border-radius: 20px; border: 4px solid #84b6f4; box-shadow: 0 10px 20px rgba(0,0,0,0.3); pointer-events: auto; display: none; flex-direction: column; justify-content: center; align-items: center; padding: 10px; box-sizing: border-box; z-index: 21;">
+                            <div id="reference-close" style="position: absolute; top: -15px; right: -15px; width: 44px; height: 44px; background: #ff5252; color: white; border-radius: 50%; display: flex; justify-content: center; align-items: center; font-size: 24px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.2); z-index: 22;">✕</div>
+                            <div id="reference-expanded-content" style="width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; overflow: hidden;"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Paleta de Colores (DOM) -->
+                <div id="painting-palette" class="painting-palette-container">
+                    <!-- Se llena desde JS -->
+                </div>
+
+                <!-- Barra de Herramientas (DOM) -->
+                <div id="painting-toolbar" class="painting-toolbar-container">
+                    <button id="tool-zoom-in" class="tool-btn ui-pressable tool-btn--soft">➕ Acercar</button>
+                    <button id="tool-zoom-out" class="tool-btn ui-pressable tool-btn--soft">➖ Alejar</button>
+                    <button id="tool-zoom-fit" class="tool-btn ui-pressable tool-btn--soft">⤢ Ajustar</button>
+                    <button id="tool-original" class="tool-btn ui-pressable tool-btn--primary">👁️ Original</button>
+                    <button id="tool-eraser" class="tool-btn ui-pressable tool-btn--danger-soft">🧽 Borrar</button>
+                    <button id="tool-undo" class="tool-btn ui-pressable tool-btn--warning">↩️ Deshacer</button>
+                    <button id="tool-reset" class="tool-btn ui-pressable tool-btn--soft">🔄 Reiniciar</button>
+                </div>
+            </div>
+
+            <div id="end-screen-2" class="end-screen hidden">
+                <h2>¡Felicidades!</h2>
+                <p>¡Qué hermoso dibujo!</p>
+                <button class="action-btn ui-pressable action-btn--painting" id="restart-btn-2">Elegir otro dibujo</button>
+            </div>
+        </main>
+    </div>
+
+    <!-- JUEGO 3: LABERINTO -->
+    <div id="game3-container" class="container game-view game-view--maze hidden">
+        <header>
+            <h1 id="level-title-3" class="game-header game-header--maze">🐶 Nivel 1</h1>
+        </header>
+        <main>
+            <!-- Phaser Game Container -->
+            <div id="maze-game-container"></div>
+            
+            <!-- Se oculta este div porque manejaremos la pantalla de fin con Phaser o aquí -->
+            <div id="end-screen-3" class="end-screen hidden">
+                <h2>¡Felicidades!</h2>
+                <p>¡El perrito llegó a casa!</p>
+                <button class="action-btn ui-pressable action-btn--maze" id="restart-btn-3">Jugar de nuevo</button>
+            </div>
+        </main>
+    </div>
+
+    <!-- JUEGO 4: MI GATITO -->
+    <div id="game4-container" class="container game-view game-view--cat hidden">
+        <header>
+            <h1 id="cat-name-display" class="game-header game-header--cat">🐱 Mi Gatito</h1>
+        </header>
+        <main class="cat-main">
+            <!-- Necesidades / Indicadores (Se mantienen en DOM superior por facilidad, aunque el juego es en Phaser) -->
+            <div class="cat-stats-horizontal">
+                <div class="stat"><span class="stat-icon">🍎</span><div class="bar"><div id="bar-hambre" class="bar-fill"></div></div></div>
+                <div class="stat"><span class="stat-icon">💧</span><div class="bar"><div id="bar-sed" class="bar-fill"></div></div></div>
+                <div class="stat"><span class="stat-icon">🔋</span><div class="bar"><div id="bar-energia" class="bar-fill"></div></div></div>
+                <div class="stat"><span class="stat-icon">🧼</span><div class="bar"><div id="bar-limpieza" class="bar-fill"></div></div></div>
+                <div class="stat"><span class="stat-icon">🧶</span><div class="bar"><div id="bar-diversion" class="bar-fill"></div></div></div>
+            </div>
+
+            <!-- Phaser Container -->
+            <div id="cat-game-container"></div>
+        </main>
+
+        <!-- Pantalla de adopción inicial -->
+        <div id="adoption-screen" class="hidden adoption-screen menu-theme">
+            <h2 class="menu-title" style="font-size: clamp(2rem, 5vw, 3.5rem);">💕 ¡Elige tu gatito!</h2>
+            <div class="cat-options">
+                <button class="cat-choice-card ui-pressable adopt-btn" data-cat="🐱">
+                    <img src="/assets/icons/shared/icon-heart.webp" alt="" aria-hidden="true" width="30" height="30" class="card-decor cat-choice-card__decor-image">
+                    <span class="card-icon" style="pointer-events: none;">🐱</span>
+                    <span class="card-text" style="pointer-events: none;">NARANJA</span>
+                </button>
+                <button class="cat-choice-card ui-pressable adopt-btn" data-cat="🐈">
+                    <div class="card-decor">⭐</div>
+                    <span class="card-icon" style="pointer-events: none;">🐈</span>
+                    <span class="card-text" style="pointer-events: none;">GRIS</span>
+                </button>
+                <button class="cat-choice-card ui-pressable adopt-btn" data-cat="🐈‍⬛">
+                    <img src="/assets/icons/shared/icon-sparkle.webp" alt="" aria-hidden="true" width="30" height="30" class="card-decor cat-choice-card__decor-image">
+                    <span class="card-icon" style="pointer-events: none;">🐈‍⬛</span>
+                    <span class="card-text" style="pointer-events: none;">NEGRO</span>
+                </button>
+                <button class="cat-choice-card ui-pressable adopt-btn" data-cat="🐾">
+                    <img src="/assets/icons/shared/icon-rainbow.webp" alt="" aria-hidden="true" width="30" height="30" class="card-decor cat-choice-card__decor-image">
+                    <span class="card-icon" style="pointer-events: none;">🐾</span>
+                    <span class="card-text" style="pointer-events: none;">BLANCO</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- JUEGO 5: MEMORIA -->
+    <div id="game5-container" class="container game-view game-view--memory hidden">
+        <header>
+            <h1 id="memory-level-title" class="game-header game-header--memory">🧠 Nivel 1</h1>
+        </header>
+        <main>
+            <div id="memory-game-container"></div>
+        </main>
+    </div>
+
+    <script src="drawings.js"></script>
+    <script src="app-core.js"></script>
+    <script src="script.js"></script>
+    <script src="game1.js"></script>
+    <script src="game2.js"></script>
+    <script src="game3.js"></script>
+    <script src="game4.js"></script>
+    <script src="game5.js"></script>
+</body>
+</html>
