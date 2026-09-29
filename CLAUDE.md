@@ -1,6 +1,6 @@
 # Juegos Sofi
 
-Contexto operativo para Claude Code. Auditado contra el código el 2026-09-28 (versión `v1.23.0`, tras 8C.4).
+Contexto operativo para Claude Code. Auditado contra el código el 2026-09-29 (versión `v1.24.0`, tras 8C.5).
 Historial de fases y contexto previo: `GEMINI.md` (histórico, puede estar desactualizado).
 
 ## Project Overview
@@ -13,7 +13,7 @@ Textos y voz en español rioplatense (`es-AR`). SPA estática sin build step, ho
 **Código actual > `GEMINI.md` / skills > suposiciones.**
 - Si la documentación contradice el código, NO modificar el código para que coincida: preservar el comportamiento y reportar la diferencia.
 - No documentar ni asumir arquitectura que no se pueda verificar en el código.
-- No hay repositorio git: no hay historial ni rollback. Ser conservador con cambios destructivos.
+- **Git:** el proyecto es un repo git (rama de trabajo `main`, con remoto `origin`). Antes de modificar, correr `git status` / `git diff --stat`: puede haber cambios sin commitear de fases anteriores. No revertirlos ni descartarlos (`reset`, `checkout`, `restore`, `clean`, `stash`) sin pedido explícito, y no commitear ni pushear sin pedido.
 
 ## Architecture
 
@@ -55,6 +55,8 @@ No productivos (no tocar sin pedido): `scratch_*.js` y los PNG de referencia en 
   - **Visual (8C.3):** `MEMORY_ASSETS` (`memory-bg.webp`, `memory-card-back.webp`, `memory-card-front.webp` en `public/assets/backgrounds/memory/`), cargados en `MemoryScene.preload()` con guarda `textures.exists`. Fondo: imagen 800x800 en profundidad -10 (el color de cámara del tema queda como fallback). Dorso y frente: `image.setDisplaySize(size)` en lugar de los `Graphics`; el `coverIcon` y el emoji siguen encima. Emparejada: `showCardMatchedVisual()` → `setAlpha(0.7)` en la imagen (o el redibujo legacy si es `Graphics`). Si falta una textura, se usa el `Graphics` legacy. Los paneles de `visualRecall` / `sequenceRecall` y `FinalMemoryScene` no cambiaron.
 - **Diferencias ("encontrá el distinto", no dos imágenes):** canvas 800x1000 FIT. Presentaciones `grid` / `memory` / `pattern` (casillas `rectangle` `#f0f0f0`, que son también la capa de feedback: verde `a5d6a7` al acertar, amarillo `fff9c4` al errar) y `scene` (park / ocean / space, con objetos en posiciones fijas y un círculo de toque transparente de `hitSize` 130–140).
   - **Visual (8C.3):** `DIFF_BACKGROUNDS` (`public/assets/backgrounds/differences/`); `preload()` carga solo el fondo de la ronda actual (`getBackgroundConfig()`). `diff-bg.webp` en grid / memory / pattern (profundidad -20, sin interacción; el blanco queda como fallback). En `createSceneLevel`, `addBackgroundImage()` y, si hay fondo, se omite **solo** la decoración emoji de profundidad negativa; posiciones, `hitSize` y objetos no cambian. Sin textura: escena legacy completa (nunca ambas). **Space activado en v1.22.2** con un fondo regenerado sin planetas, lunas ni estrellas grandes, para que no compita con los distractores 🪐 🌙 ⭐ de `cat-space` (se había desactivado en v1.22.0 por eso). Si se regenera, mantener esa restricción.
+  - **Regla de fondos de escena:** no pueden tener nada que se confunda con un símbolo de juego (peces, siluetas de peces, pulpos, vehículos, planetas…) ni objetos grandes junto a las posiciones de los objetos. Centro despejado, decoración mínima y en la periferia.
+  - **Ocean (8C.5G):** fondo nuevo, solo agua, arena, rayos de luz, burbujas y algas chicas en los costados (sin peces, coral ni rocas). Entregado en 1536x1024 (3:2): se usó el **recorte central 4:5** (819x1024) escalado a 1122x1402, q82 (`magick src -gravity center -crop 819x1024+0+0 +repage -filter Lanczos -resize 1122x1402! -strip -quality 82 -define webp:method=6 out.webp`, ~50 KB; el mismo q82 reproduce byte a byte `diff-scene-park.webp`). Source: `assets-src/differences/diff-scene-ocean.source.png`. Los fondos se dibujan con `setDisplaySize(800,1000)`: un asset que no sea 4:5 se deforma. Contraste medido (ΔE de borde): 🐟 en el agua 22–39 (el más débil, legible por contorno y ojo), 🐡 sobre la arena ~27 (igual que el fondo anterior); 🚗 (la respuesta) 60–78 en todas las posiciones.
 
 ## SofiApp
 
@@ -77,6 +79,35 @@ Otras claves de localStorage: `juegosSofi_game1_adventure_v1`, `juegos-sofi-pain
 - Todos los timers se limpian en `onHomeExit` (`stopAmbient`, `stopHomeDiscoveries`, `hideBubble`, `resetGuideState`).
 - **NO reconstruir el Home durante tareas visuales pequeñas.** Preservar: scroll vertical mobile natural, dimensiones de cards, navegación, touch targets, sin overflow horizontal, sin scroll interno en `.menu-grid`, sin `overflow-y` bloqueado globalmente.
 - `.game-card` (Home), `.drawing-card` / `.selection-card` (Pintar), `.cat-choice-card` (Gatito) son componentes distintos: no compartir geometría.
+
+## Responsive Invariants (8C.5)
+
+Todo en `styles.css`. Los canvas lógicos, `Scale.FIT` y `CENTER_BOTH` no cambian.
+- **Un solo centrado (8C.5A):** Phaser (`FIT` + `CENTER_BOTH`) es la **única** capa que centra el canvas (con `margin-left/top`). Los padres `#diff-game-container`, `#maze-game-container` y `#cat-game-container` usan `justify-content/align-items: flex-start`; `#memory-game-container` usa `text-align: left` (el canvas es inline). Centrar también el padre corría el canvas medio margen. No volver a centrar el padre.
+- **El padre de un canvas `FIT` necesita tamaño propio (8C.5C / 8C.5D):** si su alto sale del contenido, el alto depende del canvas y el canvas del alto (dependencia circular): se achica al bajar la ventana y **no vuelve a crecer**. Por eso:
+  - `#memory-game-container`: `width: 100%; max-width: 800px; aspect-ratio: 1 / 1; min-height: 0; display: flex` (canvas 800x800).
+  - `#diff-game-container`: `aspect-ratio: 4 / 5` (canvas 800x1000; **no** usar 1/1). Con `min-height: 0` y `flex-shrink` el tope del `.container` lo sigue achicando.
+  - Laberinto (`height: 800px`) y Mi Gatito (`height: 600px`) ya tenían alto propio.
+  - No sacar esas reglas. Un canvas `FIT` nuevo debe tener un padre con tamaño propio.
+- **Landscape bajo (8C.5B.1 / 8C.5E):** `@media (max-height: 600px) and (orientation: landscape)`, con selectores explícitos:
+  - `#game1-container`, `#game3-container`, `#game4-container`: `max-height: calc(100vh - 16px)`, `padding: 8px 12px`, título a 1.3rem en una línea (`br` oculto), barras del Gatito compactas.
+  - `#game5-container` (Memoria): el mismo tope y padding, título `clamp(1rem, 2.5vw, 1.3rem)` en una línea en todos los niveles. Así el nivel 4/5 no achica el canvas y el título queda a la derecha del 🏠 Menú (F9). No sacar estrellas ni texto.
+  - Adopción (`#adoption-screen`): scrolleable, `safe center`, cards en una fila de grilla. Desde 768 px, `.cat-options` usa `repeat(2, minmax(0, 1fr))` (antes desbordaba en 1366).
+  - Pintar tiene su propia regla (`safe center`, 8C.4.0) y el Home no se toca. No copiar estas reglas globalmente.
+
+Baseline medido el 2026-09-29 (CSS px; aventura en el nivel 1):
+
+| Pantalla | 390x844 | 430x932 | 844x390 | 768x1024 | 1366x768 |
+|---|---|---|---|---|---|
+| Diferencias | 322.5x403.1 | 360.5x450.6 | **255.2x319** | 598.1x747.6 | 392.9x491.2 |
+| Laberinto | 322.5x370.9 | 360.5x414.6 | **277.4x319** | 648.3x745.6 | 424.5x488.2 |
+| Mi Gatito | 322.5x201.6 | 360.5x225.3 | **422.5x264** | 681.6x426 | 710.7x444.2 |
+| Memoria | 322.5 | 360.5 | **319** (niveles 1–5) | 681.6 | 488.2 |
+| Pintar (`#drawing-area`) | 322.5 | 360.5 | 737 (scroll, `safe center`) | 666.6 | 737 |
+| Adopción (alto de card) | 160, 1 col | 160, 1 col | **77, 2x2** | 160, 2 col | 160, 2 col |
+
+- **Resize:** el tamaño final depende solo del viewport actual, en la misma instancia y partida. Diferencias 392.9 → 255.2 → 392.9 (1366 → 844 → 1366); Memoria 681.6 → 319 → 681.6 (768 → 844 → 768).
+- **Scroll:** 0 scroll horizontal del documento en todas las pantallas. El Home tiene scroll vertical natural.
 
 ## Painting — Critical Architecture
 
@@ -128,6 +159,8 @@ Otras claves de localStorage: `juegosSofi_game1_adventure_v1`, `juegos-sofi-pain
 - `getMazePath(start, end, layout, blocked)`: BFS en grilla. Solo lo usa el hint.
 - Hints (`resetHintTimers`): 10 s → pulso sobre el objetivo; 20 s → voz; 30 s → **un único** `🐾` (texto Phaser de 40 px) en la siguiente celda del camino BFS, con fade in/out y destroy. Idle a los 6 s → Caramelo `thinking` + `❓`.
 - Rastro de movimiento: en cada paso, con 50% de probabilidad, un `🐾` de texto de 20 px con alpha 0.5 que se desvanece en 800 ms y se destruye.
+- **Salto de la intro (8C.5F):** al terminar `showLevelIntro()` se habilita el input y Caramelo salta (tween de `y`, valores absolutos, 800 ms). Se guarda en `this.introHopTween` (`init()` lo pone en `null`; `onComplete` también). `cancelIntroHop()` lo corta y deja a Caramelo en el centro de su celda lógica; se llama al principio de `moveDogTo()` y de `bumpDog()`. **`dogPos` es la fuente de verdad:** un tween decorativo no puede pisar una posición posterior. Antes, un toque temprano movía `dogPos` pero el salto devolvía el sprite a la fila de inicio. El toque temprano sigue permitido (sin bloqueo nuevo). **No usar `this.events` en `MazeScene`:** `init()` lo pisa con `this.levelData.events`.
+- **Toque (8C.5H):** cada celda es una `zone` del tamaño completo de la celda, contiguas. Un toque que cae fuera de la celda buscada casi siempre cae en una celda no adyacente o en la propia y se ignora (solo suena el tap): con dispersión simulada no hubo **ningún** movimiento a una celda equivocada. Tolerancia: ±½ celda en línea recta. Un toque durante el movimiento (250 ms) se ignora (`isMoving`).
 - `FinalCelebrationScene` usa el emoji `🐶`, no el sprite de Caramelo (estado actual; no cambiarlo sin pedido).
 
 ## Mi Gatito
@@ -139,7 +172,7 @@ Otras claves de localStorage: `juegosSofi_game1_adventure_v1`, `juegos-sofi-pain
 - Cuidados: `startCareActivity(type)` → `setupEat/Play/Bath/Drink/SleepActivity` → `finishCareActivity` → `applyCareResult` → `recordCatCareAction()`.
 - Recuerdos: `CAT_MEMORIES` (15), `unlockCatMemory(id)`, álbum (`openMemoryAlbum` / `closeMemoryAlbum`), toasts en cola.
 - `onExit`: destroy de Phaser, `clearInterval(decayInterval)`, `speechSynthesis.cancel()`.
-- Canvas lógico 800x500 (16:10), `Scale.FIT` + `CENTER_BOTH`, cámara fija, sin recortes (solo franjas vacías). Escala real: 390x844 → 0.40, 430x932 → 0.45, **844x390 → 0.22 (179x112)**, 768x1024 → 0.85, 1366x768 → 0.89.
+- Canvas lógico 800x500 (16:10), `Scale.FIT` + `CENTER_BOTH`, cámara fija, sin recortes (solo franjas vacías). Escala real: 390x844 → 0.40, 430x932 → 0.45, **844x390 → 0.53 (422.5x264, desde 8C.5B.1; antes 0.22)**, 768x1024 → 0.85, 1366x768 → 0.89.
 - Capas: color de cámara < `zoneContainer` (profundidad 0: fondo, overlay de noche, suelo legacy, objetos, objetos temporales) < `cat` < hint/reaction < partículas < `navContainer` (50) < actividad de cuidado (100) < toast (200) < álbum (300) < detalle (310).
 - Movimiento libre: `this.input.on('pointerdown')` solo camina si `targets.length === 0`, con límites x 100–700, y 320–480. **Nada decorativo puede usar `setInteractive`.**
 - **Escenarios (8C.1):** `CAT_ZONE_BACKGROUNDS` (zona → `{key, path, night}`) se carga en `preload()`. `addZoneBackground(zoneKey, isNight)` agrega el PNG como **primer hijo** de `zoneContainer` (`setOrigin(0,0)`, `setDisplaySize(800,500)`, **no interactivo**) y, si `isNight`, un rectángulo translúcido como segundo hijo (room/garden `0x1a237e` a 0.28/0.30; playground `0x4a2c6d` a 0.24). Con fondo, `buildZone` no dibuja el rectángulo de suelo legacy. **Fallback:** si la textura no existe, se usa el escenario legacy completo. La regla `isNight` (18–6 h) no cambió. La ventana de Room (vidrio, marco, ☀️/🌙), la alfombra, los objetos de cuidado, `WORLD_OBJECTS`, sol/luna/estrellas del jardín y todos los eventos siguen siendo Phaser por encima del fondo.
@@ -209,11 +242,22 @@ Integración actual verificada:
 
 ## Current Phase
 
+- **8C.5** (responsive, resize y usabilidad): **cerrada y desplegada en v1.24.0** (checkpoint 2026-09-29).
+  - **A:** un solo centrado del canvas.
+  - **B.1:** landscape bajo en Diferencias, Laberinto, Mi Gatito y Adopción.
+  - **C:** recuperación de tamaño de Memoria al redimensionar.
+  - **D:** lo mismo en Diferencias.
+  - **E:** landscape bajo de Memoria + F9.
+  - **F:** carrera del salto de Caramelo.
+  - **G:** fondo de Ocean (F5).
+  - **H:** auditoría de F18, aceptada con deuda.
+  - Detalle en Responsive Invariants, Diferencias, Maze y Known Issues.
+  - **8D:** no definida; no empezar sin pedido.
 - **8A** (personajes propios): completada. Guía integrado en el Home; Caramelo integrado en el Laberinto.
 - **8B.1** (5 iconos de juegos): completada.
 - **8B.2A** (`icon-star`): completada.
 - **8B.2B** (`icon-heart`, `icon-flower`, `icon-paw`): **completada (v1.18.0).** Auditoría completa de usos: los persistentes ya estaban integrados (stickers, cards del Home, "Mimos"). El único uso nuevo migrado es el decor ❤️ de la card NARANJA de adopción. Flower y paw no tenían usos persistentes pendientes; todo lo demás es texto, efímero o gameplay y queda como emoji.
-- **8C.3** (Memoria + Diferencias): **implementada (v1.22.0)**; el fondo de Space se reactivó en v1.22.2. Memoria: fondo + dorso + frente. Diferencias: fondo general + Park + Ocean. Validado: aventuras completas de Memoria (3 tipos de ronda) y de Diferencias (10 rondas, sorpresas, hitos, final), con el mismo feedback que la línea base, fallback con 404 reales y las 5 resoluciones. La 8C.4 no está definida: no empezar sin pedido.
+- **8C.3** (Memoria + Diferencias): **implementada (v1.22.0)**; el fondo de Space se reactivó en v1.22.2. Memoria: fondo + dorso + frente. Diferencias: fondo general + Park + Ocean. Validado: aventuras completas de Memoria (3 tipos de ronda) y de Diferencias (10 rondas, sorpresas, hitos, final), con el mismo feedback que la línea base, fallback con 404 reales y las 5 resoluciones.
 - **8C.4** (ambientación de Pintar): **completa y desplegada en v1.23.0.** Tiene 2 partes:
   - 8C.4.0: fix responsive.
   - 8C.4B: patrón de fondo y marco inset (ver Painting → Ambientación).
@@ -239,7 +283,7 @@ Integración actual verificada:
 
 ## Validation
 
-Baseline (2026-09-28): todos pasan.
+Baseline (2026-09-29): los 8 JS pasan.
 
 ```bash
 for f in public/*.js; do node --check "$f" || echo "FAIL $f"; done
@@ -247,17 +291,25 @@ for f in public/*.js; do node --check "$f" || echo "FAIL $f"; done
 
 Browser: servir `public/` en la raíz (las rutas `/assets/...` son absolutas), por ejemplo `firebase serve` / `firebase emulators:start --only hosting` o cualquier servidor estático con raíz en `public/`. Esperado: 0 errores de consola (SyntaxError, ReferenceError, TypeError, Phaser, 404 de assets), sin timers fantasma y navegación completa ida y vuelta a cada juego.
 
-Responsive a validar: `390x844`, `430x932`, `844x390`, `768x1024`, `1366x768`, con foco en Home, Mis Cosas, Pintar y las pantallas modificadas. Sin scroll horizontal; Home con scroll vertical natural.
+Responsive a validar: `390x844`, `430x932`, `844x390`, `768x1024`, `1366x768` (y `932x430` si se toca el landscape). Pantallas: Home, Mis Cosas, Diferencias, Pintar, Laberinto, Adopción, Mi Gatito y Memoria. Comparar contra la tabla de Responsive Invariants. Sin scroll horizontal (probarlo con `scrollTo(200, 0)` y leer `scrollX`, porque `scrollWidth` puede marcar de más por partículas transitorias del Home). El Home tiene scroll vertical natural.
 
 Logs esperados en consola (no son errores): `Maze variants: …`, `[Painting] …`, y `CAT_MEMORIES validados` en localhost.
-Errores de consola PREEXISTENTES en cada carga (baseline 2026-09-28; no son regresiones): `[Maze Validation] Variant beach-b|snow-b|night-a|magic-a|magic-b is unsolvable` (5 de 12, falsos negativos del validador; ver Known Issues) y `Not enough symbols in visual: v-vehicles-5|v-sky-5|v-nature-5`. Comparar contra este baseline.
+Errores de consola PREEXISTENTES en cada carga (baseline 2026-09-28, igual el 2026-09-29; no son regresiones): `[Maze Validation] Variant beach-b|snow-b|night-a|magic-a|magic-b is unsolvable` (5 de 12, falsos negativos del validador; ver Known Issues) y `Not enough symbols in visual: v-vehicles-5|v-sky-5|v-nature-5`. Comparar contra este baseline.
 
 Servidor local: `.claude/launch.json` → `juegos-sofi-local` (`firebase serve --only hosting --port 5050`). Tras editar CSS/HTML, recargar sin caché (el navegador cachea `styles.css`).
+
+Trampas conocidas del entorno de prueba (no son bugs de la app):
+- **Arranque del servidor:** si la página abre antes de que `firebase serve` esté listo, `styles.css` falla (`ERR_CONNECTION_REFUSED`, status 0) y todas las vistas se ven a la vez. Recargar.
+- **Pestaña oculta:** usar el reloj virtual descripto en Known Issues. `headlessStep` no renderiza: para una captura, avanzar con `game.step()` (la primera captura puede mostrar el frame anterior).
+- **Esperas:** en Diferencias, Laberinto y Memoria el título del header se fija en `init()` / `create()`, y los assets cargan en tiempo real. Medir el canvas recién después de que la escena esté corriendo, o el tamaño sale del header viejo.
+- **Globales `let`:** `catState`, `game1Instance`, `currentMazeLevel`… no son `window.*`. Leerlas por nombre o con `(0, eval)('catState')`.
+- **Adopción:** para volver a verla, borrar `juegosSofi_gatito` y poner `catState.adopted = false`.
+- **Datos:** el harness debe guardar y restaurar `localStorage`. "Reiniciar" en Pintar borra el progreso del dibujo.
 
 ## Versioning / Deploy
 
 Fuente: `.agents/skills/juegos-sofi-versioning/SKILL.md`.
-- La versión está en `public/app-core.js` → `SofiApp.version` (hoy `v1.23.0`); se renderiza sola en el Home.
+- La versión está en `public/app-core.js` → `SofiApp.version` (hoy `v1.24.0`); se renderiza sola en el Home.
 - Formato `vMAJOR.MINOR.PATCH`: MAJOR = cambio de framework o estructura; MINOR = fase nueva o minijuego nuevo; PATCH = bugfix o mejora visual pequeña.
 - Cada deploy a Firebase debe incrementar la versión. Informar al usuario el número nuevo.
 - Deploy: `firebase deploy` (Hosting, proyecto `gaming-eb091`). **Solo cuando el usuario lo pida explícitamente**; es una acción externa.
@@ -283,7 +335,6 @@ No hacer refactors, cambios de gameplay, ediciones a `GEMINI.md` ni deploys sin 
 ## Known Issues / Tech Debt (no corregidos)
 
 - Mi Gatito: `WORLD_OBJECTS` define `window` y `yarn_dec` para Room, pero `buildZone('room')` nunca los construye. 6 recuerdos (`butterfly`, `bird`, `ladybug`, `firefly`, `box-surprise`, `moon-window`) no tienen ningún `unlockCatMemory`. `initiativeState.active` nunca se pone en `true`: el sistema de iniciativas existe pero nunca se dispara.
-- Mi Gatito en 844x390: el canvas se ve a 179x112 (escala 0.22), por la altura fija de 600px del contenedor y FIT (ya pasaba antes de 8C.1).
 - Fondos de Mi Gatito: peso resuelto en v1.21.2 (WebP, ~174 KB). Siguen apartándose de la especificación de 8C.1: horizonte en ~58%, suelo naranja en Room (🐈 contrasta poco de día), flores y arbustos en primer plano en Garden y Playground, y una estantería detrás de 🛁.
 - `playTone` se invoca en `game2.js` y `game3.js` (protegido con `typeof playTone === 'function'`), pero no está definido en ningún archivo: esos tonos nunca suenan.
 - **Resuelto en v1.21.3 (Pintar):** la instancia no se destruía al volver al Home; los listeners del transform layer y de los botones Libre/Guía se acumulaban entre sesiones (cada toque se procesaba una vez por escena vieja y pintaba con el color viejo); la celebración quedaba tapada por el dibujo; y bitsy y sparks no se podían completar (4 y 5 regiones tapadas; ahora 30 regiones cada uno). Copia de los archivos previos en `assets-src/code-backup-v1.21.2/`.
@@ -303,13 +354,47 @@ No hacer refactors, cambios de gameplay, ediciones a `GEMINI.md` ni deploys sin 
 - Validación en el browser con la pestaña oculta: Phaser baja a ~3 fps y `destroy(true)` (diferido) puede dejar un canvas viejo unos instantes. Para tests automáticos: detener `game.loop` y avanzar con `game.headlessStep()`, con el `TweenManager.getDelta` parcheado en la página de prueba (en 3.60 los tweens usan reloj real) y yields por `MessageChannel`.
 - v1.22.0 salió sin los assets de Memoria (la carpeta quedó vacía por un movimiento de archivos externo); se restauraron y publicaron en v1.22.1.
 - Assets de 8C.3: resuelto en v1.22.2 (WebP real). Los 39 PNG legacy de `public/assets/` se borraron en v1.23.0 (~13 MB), después de verificar que ningún archivo los referenciaba y que cada uno tenía una copia idéntica en `assets-src/originals-v1.22/`. `public/` ya no tiene ningún `.png`.
-- **Ocean (8C.3):** el fondo tiene cardúmenes de peces lejanos (siluetas, y≈100–240) y mucho coral junto a los objetos; 🐟 (azul) contrasta poco con el agua. Se juega bien, pero conviene suavizarlo si se regenera. El frente de carta de Memoria tiene ~5% de margen transparente (el dorso ~1%): al girar se ve un poco más chico. La carta emparejada (alpha 0.7) se distingue poco de una abierta a 34 px.
-- **`#memory-game-container` sin CSS:** el canvas de Memoria solo se achica al rotar o redimensionar, y no vuelve a crecer hasta volver a entrar al juego (ya pasaba antes de 8C.3).
+- Memoria: el frente de carta tiene ~5% de margen transparente (el dorso ~1%): al girar se ve un poco más chico. La carta emparejada (alpha 0.7) se distingue poco de una abierta a 34 px.
 - La decoración aleatoria del Laberinto (30% de las celdas libres, profundidad -1) queda debajo del rectángulo opaco de su celda (profundidad 0), así que **nunca se ve**. Si se sube su profundidad, puede tapar los caminos.
-- Laberinto en 844x390: canvas 143x164 (escala 0.18); en 7x7 las celdas miden ~20px y Caramelo ~16px.
 - `.cat-choice-card .card-decor` (hoy solo el emoji ⭐ de GRIS) tiene `pointer-events: auto`, y el listener de adopción lee `e.target.getAttribute('data-cat')`: un toque justo sobre esos decor adopta con `emoji = null` (**verificado en el browser** con ⭐ de GRIS: el gato queda sin representación). NARANJA, NEGRO y BLANCO ya no lo tienen (sus img usan `pointer-events: none`); GRIS sigue afectada.
-- En 1366x768 las `.cat-choice-card` (3 columnas) desbordan el contenedor de adopción a la derecha (ya pasaba antes de 8B.2B). La card NEGRO queda parcialmente recortada por `#game4-container { overflow: hidden }`: su decor no se ve ni se puede tocar.
 - Los stickers `arcoiris` y `flor` están en `stickersConfig`, pero ningún juego llama `unlockSticker` con esos IDs: hoy son imposibles de desbloquear.
 - Muchos `console.log` de debug en Pintar.
 - CSS legacy posiblemente sin uso (fases 7/8) y abundante estilo inline en `index.html` (Pintar).
-- Sin control de versiones (git).
+
+### Resuelto en 8C.5
+
+F1 doble centrado · F2 Diferencias en landscape bajo · F3 Memoria no recuperaba tamaño · F3-b Diferencias no recuperaba tamaño · F4 cards de adopción recortadas o desbordadas · F5 Ocean ambiguo (peces y coral en el fondo) · F9 🏠 Menú tapaba el título de Memoria · carrera del salto de intro de Caramelo · Mi Gatito y Laberinto chicos en 844x390 (0.22 / 0.18 → 0.53 / 0.35). F16 (la documentación decía que no había git) se corrigió en este archivo.
+
+### Deuda aceptada (no corregir sin pedido)
+
+- **F18, Laberinto en landscape bajo: ACEPTADO CON DEUDA; no bloquea 8D.**
+  - En 844x390 la celda 7x7 mide ≈39.6 px (≈6.6 mm en un iPhone), 6x6 46.2 y 5x5 55.5; en portrait 390 el 7x7 mide 46.1.
+  - Con toques imprecisos simulados, parte se ignora (7x7, σ 12 px: 83% aciertos; σ 18 px: 45%). Nunca movió a una celda equivocada.
+  - Confirmar con Sofi en el dispositivo.
+  - Opción futura de menor riesgo (solo CSS en landscape bajo): título al costado del canvas + menos margen y padding, ≈46.5 px por celda.
+  - Observaciones: los íconos del HUD miden ~8 px; la 🐾 de la pista se dibuja sobre el objetivo cuando el próximo paso es el objetivo; 💡 marginal; 🦴 sobre la nieve con poco contraste.
+- **Pintar:**
+  - F6: la primera entrada a Guía oculta el Original.
+  - F7: Ayuda no deja el resaltado.
+  - `focusRegion` no centra con precisión.
+  - La posición de scroll se conserva entre visitas.
+  - `pointercancel` pinta.
+  - Detalle en "Pendiente (Pintar)".
+- **Voz:**
+  - F8: la voz puede seguir después de salir de un juego.
+  - A futuro: un `SofiApp.voice` con audio grabado primero y TTS de fallback (inventario en `docs/voice-audit.csv`, sin trackear).
+  - F15: mezcla de "quieres" / "querés" en los textos.
+- **Laberinto:**
+  - F11: los símbolos decorativos de algunos tiles (estrellas en la pared de Noche, estrellita en la roca de Playa) pueden confundirse con objetivos.
+  - F12: `walk-4` nunca se ve (el paso dura 250 ms y el cuadro 100 ms).
+  - F13: falsos negativos del validador (ver arriba).
+  - `preload()` chequea `textures.exists` pero no las cargas en curso: reiniciar la escena antes de que terminen da "Texture key already in use".
+  - Los demás saltos de Caramelo (recolección −15 px, llegada −20 px) también usan valores absolutos. Hoy corren con el input bloqueado.
+- **Mi Gatito:**
+  - F10: transparencia en la adopción.
+  - F17: objetos decorativos.
+  - Además, lo ya listado arriba.
+- **General:**
+  - F14: pedidos repetidos de texturas ya cacheadas.
+  - Phaser `VisibilityHandler` deja **+1 listener `visibilitychange`** en `document` por cada juego abierto y cerrado (medido 6 en 6 ciclos).
+  - Sin probar: landscape angosto (< ~640 px de ancho, ahí el título puede volver a tocar el 🏠) y `orientationchange` real en un dispositivo (solo se emuló el viewport).

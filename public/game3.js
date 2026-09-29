@@ -633,7 +633,8 @@ class MazeScene extends Phaser.Scene {
         this.companionSprites = new Map();
         this.isMoving = false;
         this.inputLocked = true;
-        
+        this.introHopTween = null;
+
         if(levelTitle3) {
             const stars = '⭐'.repeat(currentMazeLevel) + '○'.repeat(6 - currentMazeLevel);
             levelTitle3.innerHTML = `${this.theme.wall} ${this.theme.name} <br><span style="font-size: 0.6em; letter-spacing: 2px;">${stars}</span>`;
@@ -949,7 +950,10 @@ class MazeScene extends Phaser.Scene {
                 } else {
                     speakMaze(this.mission.instruction.speech);
                 }
-                this.tweens.add({ targets: this.dogObj, y: this.dogObj.y - 10, duration: 200, yoyo: true, repeat: 1 });
+                this.introHopTween = this.tweens.add({
+                    targets: this.dogObj, y: this.dogObj.y - 10, duration: 200, yoyo: true, repeat: 1,
+                    onComplete: () => { this.introHopTween = null; }
+                });
                 this.resetHintTimers();
             }
         });
@@ -1067,7 +1071,18 @@ class MazeScene extends Phaser.Scene {
         }
     }
     
+    // 8C.5F: el salto de la intro es decorativo y anima `y` con valores absolutos de la celda de inicio (800 ms).
+    // El input ya está habilitado mientras dura, así que si Sofi toca antes se corta y Caramelo vuelve al centro
+    // de su celda lógica. Si no, al terminar el movimiento el salto lo devolvía a la fila de inicio.
+    cancelIntroHop() {
+        if (!this.introHopTween) return;
+        this.introHopTween.stop();
+        this.introHopTween = null;
+        this.dogObj.y = this.dogPos.r * this.cellSize + this.cellSize / 2;
+    }
+
     bumpDog(r, c) {
+        this.cancelIntroHop();
         this.tweens.add({
             targets: this.dogObj,
             x: this.dogObj.x + (c > this.dogPos.c ? 10 : (c < this.dogPos.c ? -10 : 0)),
@@ -1078,7 +1093,8 @@ class MazeScene extends Phaser.Scene {
 
     moveDogTo(r, c) {
         this.isMoving = true;
-        
+        this.cancelIntroHop();
+
         let prevDogPos = { r: this.dogPos.r, c: this.dogPos.c };
         let prevDogXY = { x: this.dogObj.x, y: this.dogObj.y };
         

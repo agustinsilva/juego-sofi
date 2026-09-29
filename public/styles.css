@@ -72,6 +72,36 @@ html {
     align-items: center;
 }
 
+/* 8C.5A: Phaser (Scale.FIT + CENTER_BOTH) ya centra el canvas con margin-left/margin-top. El centrado del
+   padre se sumaba a esos márgenes y corría el canvas (la mitad del margen) a la derecha y hacia abajo.
+   Diferencias, Laberinto y Mi Gatito (8C.5B.1); Memoria usa el text-align de abajo. */
+#diff-game-container, #maze-game-container, #cat-game-container {
+    justify-content: flex-start;
+    align-items: flex-start;
+}
+/* 8C.5D (F3-b): mismo problema que Memoria (8C.5C). Sin alto propio, el padre medía lo que el canvas (con el
+   canvas oculto: 752x0) y FIT usaba ese alto: se achicaba con el tope del .container, pero no volvía a crecer
+   (393x491 → 255x319 → 255x319 en 1366x768). Ahora pide la proporción del canvas lógico (800x1000) sobre el
+   ancho disponible; el tope lo sigue achicando (min-height: 0, flex-shrink) igual que antes. */
+#diff-game-container {
+    aspect-ratio: 4 / 5;
+}
+#memory-game-container {
+    text-align: left; /* el canvas es inline y heredaba text-align: center de .container */
+    /* 8C.5C (F3): el padre no tenía tamaño propio. Su alto era el del canvas, y FIT medía ese alto para
+       dimensionar el canvas (dependencia circular): se achicaba con el tope de 90vh del .container, pero al
+       volver a agrandar la ventana nada pedía más alto y quedaba chico (681.6 → 222 → 237). Ahora pide un
+       cuadrado del ancho disponible (el canvas lógico es 800x800), independiente del canvas, y el flex lo
+       achica si no entra. Mismo patrón que Laberinto (height: 800px), que sí se recuperaba. */
+    width: 100%;
+    max-width: 800px;
+    aspect-ratio: 1 / 1;
+    min-height: 0;
+    display: flex;             /* sin el hueco de línea de un canvas inline */
+    justify-content: flex-start;
+    align-items: flex-start;   /* Phaser sigue siendo el único que centra (8C.5A) */
+}
+
 body {
     font-family: 'Nunito', sans-serif;
     background-color: var(--color-bg);
@@ -1740,4 +1770,77 @@ body.is-home {
     .cat-choice-card { min-height: 70px; padding: 8px 16px; }
     .cat-choice-card .card-icon { font-size: 2.5rem; }
     .cat-choice-card .card-text { font-size: 1.4rem; }
+}
+
+/* --- 8C.5B.1: ADOPCIÓN SIN DESBORDE HORIZONTAL (>= 768px) ---
+   Con `1fr` (mínimo = contenido) las cards eran más anchas que la columna y se salían del contenedor
+   (GRIS/BLANCO en 768, NEGRO en 1366). minmax(0, 1fr) las ajusta al ancho. El contenedor mide como mucho
+   800px, así que 3 columnas nunca entran: a partir de 1024 quedan 2, igual que en tablet. */
+@media (min-width: 768px) {
+    .cat-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (min-width: 1024px) {
+    .cat-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* --- 8C.5B.1: LANDSCAPE BAJO (teléfono acostado) — Diferencias, Laberinto y Mi Gatito ---
+   El canvas usa FIT: su tamaño lo da el alto que queda después del header, los paddings y (en el Gatito) las
+   barras. Acá solo se compacta ese "chrome"; no cambian los canvas lógicos, el FIT ni el gameplay.
+   Pintar y Memoria no están incluidos (IDs explícitos). */
+@media (max-height: 600px) and (orientation: landscape) {
+    #game1-container, #game3-container, #game4-container {
+        max-height: calc(100vh - 16px);
+        padding: 8px 12px;
+    }
+    /* El título pasa a una línea: el JS arma "Ronda N / 10<br><span>○○○</span>" */
+    #game1-container .game-header, #game3-container .game-header, #game4-container .game-header {
+        font-size: 1.3rem;
+        line-height: 1.2;
+        margin-bottom: 6px;
+    }
+    #game1-container .game-header br, #game3-container .game-header br { display: none; }
+    #game1-container .game-header span, #game3-container .game-header span { margin-left: 0.4em; }
+
+    /* Mi Gatito: barras compactas (misma información) y angostas para no quedar bajo el botón 🏠 Menú */
+    #game4-container .cat-main { gap: 6px; }
+    #game4-container .cat-stats-horizontal {
+        max-width: 540px;
+        padding: 4px 8px;
+        gap: 6px;
+        margin-bottom: 0;
+    }
+    #game4-container .stat { padding: 2px 6px; }
+    #game4-container .stat-icon { width: 22px; height: 22px; font-size: 1rem; }
+
+    /* Adopción: se puede scrollear si no entra, y cada card vuelve a ser una sola fila. La decoración está
+       primera en el DOM con grid-column: 3, y el auto-placement mandaba ícono y texto a una segunda fila. */
+    #adoption-screen {
+        overflow-y: auto;
+        justify-content: flex-start;
+        justify-content: safe center;
+        padding: 8px 0;
+        box-sizing: border-box;
+    }
+    #adoption-screen .menu-title { margin-bottom: 8px; }
+    #adoption-screen .cat-options { gap: 12px; }
+    #adoption-screen .cat-choice-card > * { grid-row: 1; }
+}
+
+/* --- 8C.5E: LANDSCAPE BAJO — Memoria ---
+   Misma compactación que 8C.5B.1. El título es texto plano de game5.js ("🃏 🌸 Nivel N / 5  ⭐ ○ …", sin <br>)
+   con el ::after " ⭐ 🧩". A 42px (clamp 5vw) ocupaba ~81px, y desde el nivel 4 el ::after bajaba a una
+   segunda línea (~139px): el canvas quedaba en 222px (164 en nivel 4-5). Además el título arrancaba a la
+   izquierda y el 🏠 Menú tapaba su ícono (F9). A 1.3rem entra en una línea y queda centrado, lejos del botón;
+   en pantallas más angostas (667x375) el tamaño baja con el ancho para que el título siga empezando a la
+   derecha del botón. #memory-game-container (8C.5C) no cambia: el canvas crece solo porque el header ocupa menos. */
+@media (max-height: 600px) and (orientation: landscape) {
+    #game5-container {
+        max-height: calc(100vh - 16px);
+        padding: 8px 12px;
+    }
+    #game5-container .game-header {
+        font-size: clamp(1rem, 2.5vw, 1.3rem);
+        line-height: 1.2;
+        margin-bottom: 6px;
+    }
 }
