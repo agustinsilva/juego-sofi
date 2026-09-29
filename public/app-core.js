@@ -56,7 +56,7 @@ Object.values(SOFI_GUIDE_ASSETS).forEach(src => {
 });
 
 window.SofiApp = {
-    version: 'v1.22.2',
+    version: 'v1.23.0',
     profile: {
         name: 'Sofi'
     },

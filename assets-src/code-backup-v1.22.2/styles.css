@@ -191,24 +191,6 @@ header h1 {
     gap: 20px;
 }
 
-/* 8C.4.0: `.container > main` centra con justify-content: center; si el contenido de Pintar es más alto
-   que el main, desborda hacia arriba y esa parte no se puede scrollear. `safe` centra solo si entra
-   (si no, alinea arriba). flex-start es el fallback para navegadores sin `safe`. Solo Pintar. */
-.game-view--painting > main.drawing-main {
-    justify-content: flex-start;
-    justify-content: safe center;
-}
-
-/* 8C.4B: marco interior del área de dibujo. Solo visual: una sombra inset se pinta debajo de los hijos (el SVG y el
-   canvas son transparentes) y no cambia el box. Los 8px entran en el margen blanco del 5% (16px mínimo, en 390px).
-   `!important` porque el box-shadow original es inline en index.html; la última sombra es esa misma, sin cambios. */
-#drawing-area {
-    box-shadow:
-        inset 0 0 0 6px #e0f7fa,
-        inset 0 0 0 8px #b2ebf2,
-        0 4px 10px rgba(0, 0, 0, 0.1) !important;
-}
-
 .palette {
     display: flex;
     gap: 15px;
@@ -1283,10 +1265,6 @@ header h1 {
 }
 .game-view--painting {
     background: linear-gradient(180deg, var(--game-painting-soft), var(--color-surface));
-    /* 8C.4B: patrón del Mundo de Sofi (512x512, se muestra a 256px) sobre el mismo gradiente. Si no carga, queda el gradiente. */
-    background:
-        url('/assets/backgrounds/painting/painting-bg-tile.webp') 0 0 / 256px 256px repeat,
-        linear-gradient(180deg, var(--game-painting-soft), var(--color-surface));
     border-color: var(--game-painting);
 }
 .game-view--maze {

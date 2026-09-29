@@ -1,0 +1,12 @@
+Tile 512x512 armado con motivos de painting-bg-tile.source.png (componentes aislados por máscara de alpha).
+Tratamiento: -resize (Lanczos), -modulate 100,80 (saturación 80%), alpha x 0.35 / 0.50 / 0.70.
+motivo   resize  centroX centroY
+rainbow  130x    150 112
+crayonY  x80     400 96
+star     38x     268 196
+heart    48x     440 236
+brush    x100    96  318   (sin la gota)
+cloud    72x     300 318
+crayonP  86x     410 410
+cloud    50x     200 452
+Bordes: alpha máximo 0 en filas/columnas 0 y 511 → seamless por construcción. Cobertura 6.7%.
