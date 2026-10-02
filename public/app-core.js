@@ -56,7 +56,7 @@ Object.values(SOFI_GUIDE_ASSETS).forEach(src => {
 });
 
 window.SofiApp = {
-    version: 'v1.24.0',
+    version: 'v1.26.0',
     profile: {
         name: 'Sofi'
     },
@@ -119,7 +119,14 @@ window.SofiApp = {
             if (currentViewName === targetViewName) return;
             
             SofiApp.state.transitioning = true;
-            
+
+            // 8D.2C: al salir de una vista no sigue su celebración ni su voz (la cola de rewards sí sigue).
+            if (SofiApp.celebration) SofiApp.celebration.cancel();
+            if (SofiApp.voice) SofiApp.voice.cancel();
+            // 8D.3C: los premios ya están guardados; su feedback retenido no puede quedar bloqueado al salir.
+            // Va después de celebration.cancel(): con el lote retenido la cola está ocupada y las cards siguen sin voz (carryover).
+            if (SofiApp.progress) SofiApp.progress.releaseAllRewardFeedback();
+
             // Execute onExit of current view if exists
             const currentViewConfig = SofiApp._views[currentViewName];
             if (currentViewConfig && currentViewConfig.onExit) {
@@ -248,16 +255,16 @@ window.SofiApp = {
             oscillator.start(this._ctx.currentTime);
             oscillator.stop(this._ctx.currentTime + 0.15);
         },
-        _playTone(freq, type, duration, startTimeOffset = 0) {
+        _playTone(freq, type, duration, startTimeOffset = 0, peak = 0.1) {
             if (!this._ctx) return;
             const startTime = this._ctx.currentTime + startTimeOffset;
             const oscillator = this._ctx.createOscillator();
             const gainNode = this._ctx.createGain();
-            
+
             oscillator.type = type;
             oscillator.frequency.setValueAtTime(freq, startTime);
             gainNode.gain.setValueAtTime(0, startTime);
-            gainNode.gain.linearRampToValueAtTime(0.1, startTime + 0.05);
+            gainNode.gain.linearRampToValueAtTime(peak, startTime + 0.05);
             gainNode.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
             
             oscillator.connect(gainNode);
@@ -274,6 +281,37 @@ window.SofiApp = {
             this._playTone(783.99, 'sine', 0.4, 0.2); 
         },
         
+        // 8D.2C: un sonido por nivel de celebración (0 micro, 1 progreso, 2 logro, 3 colección), todo sintetizado.
+        // Los niveles 1-3 los pide SofiApp.celebration (prioridad); el 0 lo pueden usar los juegos para el feedback chico.
+        cue(level) {
+            if (!this.enabled || !this._ctx) return;
+            this._resume();
+            if (level === 0) {
+                // Blip suave (~200 ms), más liviano que success()
+                this._playTone(880, 'sine', 0.12, 0, 0.05);
+                this._playTone(1174.66, 'sine', 0.14, 0.06, 0.04);
+            } else if (level === 1) {
+                this.success(); // el C-E-G de siempre (~600 ms)
+            } else if (level === 2) {
+                // C-E-G-C' más lleno (sine + triangle), ~0.8 s
+                [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => {
+                    const d = i === 3 ? 0.45 : 0.3;
+                    this._playTone(f, 'sine', d, i * 0.12, 0.08);
+                    this._playTone(f, 'triangle', d, i * 0.12, 0.05);
+                });
+            } else if (level === 3) {
+                // Arpegio que sube + acorde sostenido con destellos agudos, ~1.4 s. Se distingue del 2 por duración y
+                // cantidad de notas, no por volumen: el acorde va más suave (8D.2E: pico 0.227 → 0.155, como el cue 2).
+                [523.25, 659.25, 783.99, 1046.5, 1318.51].forEach((f, i) => this._playTone(f, 'sine', 0.25, i * 0.1, 0.08));
+                [1046.5, 1318.51, 1567.98].forEach(f => {
+                    this._playTone(f, 'sine', 0.85, 0.55, 0.035);
+                    this._playTone(f, 'triangle', 0.85, 0.55, 0.02);
+                });
+                this._playTone(2093, 'sine', 0.15, 0.75, 0.04);
+                this._playTone(2637.02, 'sine', 0.15, 0.95, 0.03);
+            }
+        },
+
         softError() {
             if (!this.enabled || !this._ctx) return;
             this._resume();
@@ -312,16 +350,44 @@ window.SofiApp = {
         },
         
         stickersConfig: {
-            detective: { emoji: '🔍', name: 'Detective' },
-            artista: { emoji: '🎨', name: 'Artista' },
+            detective: { emoji: '🔍', name: 'Detective', asset: '/assets/icons/stickers/sticker-detective.webp' },
+            artista: { emoji: '🎨', name: 'Artista', asset: '/assets/icons/stickers/sticker-artista.webp' },
             exploradora: { emoji: '🐾', name: 'Exploradora', asset: '/assets/icons/shared/icon-paw.webp' },
             amiga: { emoji: '❤️', name: 'Amiga', asset: '/assets/icons/shared/icon-heart.webp' },
+            memoriosa: { emoji: '🦉', name: 'Memoriosa', asset: '/assets/icons/stickers/sticker-memoriosa.webp' },
             arcoiris: { emoji: '🌈', name: 'Arcoíris', asset: '/assets/icons/shared/icon-rainbow.webp' },
-            flor: { emoji: '🌸', name: 'Flor', asset: '/assets/icons/shared/icon-flower.webp' }
+            flor: { emoji: '🌸', name: 'Flor', asset: '/assets/icons/shared/icon-flower.webp' } // inactivo (8D.1B): no se otorga ni se muestra
         },
-    
+
+        // 8D.1E: un sticker por juego; con los 5 se gana Arcoíris. Flor no participa.
+        mainStickers: ['detective', 'artista', 'exploradora', 'amiga', 'memoriosa'],
+        completionSticker: 'arcoiris',
+
         init() {
             this.load();
+            // Premios que se derivan de progreso ya guardado (antes de que el Home o Mis Cosas se dibujen)
+            if (this.reconcileProgressRewards()) this.save();
+        },
+
+        // Silenciosa e idempotente: solo agrega stickers derivados que faltan. Sin feedback, estrellas ni eventos.
+        // Memoriosa si ya se terminó la Memoria (memory-level-5); después Arcoíris si están los 5 stickers de juego.
+        reconcileProgressRewards() {
+            const { stickers, events } = this.state;
+            if (!Array.isArray(stickers) || !Array.isArray(events)) return false;
+            let changed = false;
+            if (events.includes('memory-level-5') && !stickers.includes('memoriosa')) {
+                stickers.push('memoriosa');
+                changed = true;
+            }
+            if (this.hasAllMainStickers() && !stickers.includes(this.completionSticker)) {
+                stickers.push(this.completionSticker);
+                changed = true;
+            }
+            return changed;
+        },
+
+        hasAllMainStickers() {
+            return this.mainStickers.every(id => this.state.stickers.includes(id));
         },
     
         load() {
@@ -362,7 +428,7 @@ window.SofiApp = {
         awardStar(source = null) {
             this.state.stars++;
             this.save();
-            this.showRewardFeedback('⭐', '¡Una estrella!', '/assets/icons/shared/icon-star.webp');
+            this.enqueueRewardFeedback({ type: 'star' });
             if (typeof refreshProgressUI === 'function') refreshProgressUI();
             if (SofiApp.world) SofiApp.world.notify({ type: 'star', priority: 2, source: source });
         },
@@ -370,71 +436,267 @@ window.SofiApp = {
         unlockSticker(stickerId) {
             if (!this.stickersConfig[stickerId]) return false;
             if (this.state.stickers.includes(stickerId)) return false;
-            
+
             this.state.stickers.push(stickerId);
             this.save();
-            
+
             const st = this.stickersConfig[stickerId];
-            this.showRewardFeedback(st.emoji, '¡Nuevo sticker!', st.asset || null);
-            if (SofiApp.world) SofiApp.world.notify({ type: 'sticker', priority: 3, emoji: st.emoji });
+            this.enqueueRewardFeedback({
+                type: 'sticker', id: stickerId, name: st.name, emoji: st.emoji, asset: st.asset || null,
+                special: stickerId === this.completionSticker
+            });
+            // 8D.2C: Arcoíris avisa como 'collection' (prioridad 4) para que el guía diga "¡Juntaste todo!"
+            if (SofiApp.world) SofiApp.world.notify(stickerId === this.completionSticker
+                ? { type: 'collection', priority: 4, emoji: st.emoji }
+                : { type: 'sticker', priority: 3, emoji: st.emoji });
+            // 8D.1E: el quinto sticker de juego (cualquiera) desbloquea Arcoíris. Arcoíris no vuelve a chequear.
+            if (stickerId !== this.completionSticker) this.checkCollectionCompletion();
             return true;
         },
+
+        checkCollectionCompletion() {
+            if (!this.hasAllMainStickers()) return false;
+            return this.unlockSticker(this.completionSticker);
+        },
     
+        // --- 8D.1F: cola de feedback de premios (solo runtime, nunca se guarda) ---
+        // Antes cada premio creaba su propia card y se superponían (estrella + sticker + Arcoíris a la vez).
+        // Ahora los premios de una misma acción (que los juegos otorgan en el mismo call stack) se juntan en un lote,
+        // se combinan y se muestran de a una card por vez.
+        _rewardFeedback: { batch: [], flushTimer: null, queue: [], active: null, timers: [] },
+        REWARD_CARD_VISIBLE_MS: 1500,
+        REWARD_CARD_FADE_MS: 400,
+
+        // Compatibilidad: una card suelta con emoji / texto / imagen, que también pasa por la cola.
         showRewardFeedback(emoji, text, assetSrc = null) {
-            const overlay = document.createElement('div');
-            overlay.style.position = 'fixed';
-            overlay.style.top = '50%';
-            overlay.style.left = '50%';
-            overlay.style.transform = 'translate(-50%, -50%) scale(0)';
-            overlay.style.zIndex = '9999';
-            overlay.style.backgroundColor = 'rgba(255,255,255,0.95)';
-            overlay.style.padding = '20px 40px';
-            overlay.style.borderRadius = '30px';
-            overlay.style.boxShadow = '0 10px 30px rgba(0,0,0,0.2)';
-            overlay.style.textAlign = 'center';
-            overlay.style.pointerEvents = 'none';
-            overlay.style.transition = 'transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.4s';
-            
-            const em = document.createElement(assetSrc ? 'img' : 'div');
-            if (assetSrc) {
-                em.src = assetSrc;
-                em.alt = '';
-                em.setAttribute('aria-hidden', 'true');
-                em.className = 'reward-overlay__icon-image';
-            } else {
-                em.textContent = emoji;
-                em.style.fontSize = '80px';
-            }
-            
-            const msg = document.createElement('div');
-            msg.textContent = text;
-            msg.style.fontSize = '24px';
-            msg.style.fontFamily = 'Nunito, sans-serif';
-            msg.style.color = '#333';
-            msg.style.marginTop = '10px';
-            
-            overlay.appendChild(em);
-            overlay.appendChild(msg);
-            document.body.appendChild(overlay);
-            SofiApp.world.setGuideState('celebrate', { duration: 3000, priorityCheck: true });
-            
-            SofiApp.audio.success(); 
-            
-            requestAnimationFrame(() => {
-                overlay.style.transform = 'translate(-50%, -50%) scale(1)';
+            this.enqueueRewardFeedback({ type: 'custom', emoji, text, asset: assetSrc });
+        },
+
+        enqueueRewardFeedback(reward) {
+            const fb = this._rewardFeedback;
+            fb.batch.push(reward);
+            this._scheduleRewardFlush();
+        },
+
+        // Único lugar que programa el flush. setTimeout 0: se junta todo lo que el mismo stack síncrono otorgue
+        // (evento → sticker → Arcoíris). Con un hold activo no se programa: el lote espera a que se libere.
+        _scheduleRewardFlush() {
+            const fb = this._rewardFeedback;
+            if (fb.flushTimer || !fb.batch.length || this._rewardHolds.size) return;
+            fb.flushTimer = setTimeout(() => this._flushRewardBatch(), 0);
+        },
+
+        // --- 8D.3C: hold del feedback de premios (solo runtime, nunca se guarda) ---
+        // El hold controla CUÁNDO se muestra el feedback, nunca cuándo se guarda el premio: recordEvent / unlockSticker
+        // persisten en el momento, y sus cards quedan en el lote (sin card, sin cue) hasta que se libera el último hold.
+        // El lote retenido cuenta como ocupado (isBusy / whenIdle esperan). Cada hold es un handle propio: soltar uno no
+        // suelta otros y soltarlo dos veces no hace nada. La navegación los suelta todos (releaseAllRewardFeedback) y
+        // cada hold se suelta solo a los REWARD_HOLD_SAFETY_MS si nadie lo soltó (red de seguridad, no flujo normal).
+        REWARD_HOLD_SAFETY_MS: 6000,
+        _rewardHolds: new Map(), // handle → timer de seguridad
+
+        // Devuelve un handle opaco para releaseRewardFeedback(handle).
+        holdRewardFeedback() {
+            const handle = Object.freeze({ rewardHold: true });
+            const timer = setTimeout(() => this.releaseRewardFeedback(handle), this.REWARD_HOLD_SAFETY_MS);
+            this._rewardHolds.set(handle, timer);
+            return handle;
+        },
+
+        // Suelta ese hold. true si estaba activo; false si ya se había soltado o no es un handle conocido.
+        // Al soltar el último, programa el mismo flush de siempre (si hay algo en el lote).
+        releaseRewardFeedback(handle) {
+            if (!this._rewardHolds.has(handle)) return false;
+            clearTimeout(this._rewardHolds.get(handle));
+            this._rewardHolds.delete(handle);
+            this._scheduleRewardFlush();
+            return true;
+        },
+
+        // Red de seguridad de la navegación: suelta todos los holds sin perder ni duplicar el lote. Devuelve cuántos soltó.
+        releaseAllRewardFeedback() {
+            const count = this._rewardHolds.size;
+            this._rewardHolds.forEach(timer => clearTimeout(timer));
+            this._rewardHolds.clear();
+            this._scheduleRewardFlush();
+            return count;
+        },
+
+        _flushRewardBatch() {
+            const fb = this._rewardFeedback;
+            fb.flushTimer = null;
+            // Un hold tomado con el flush ya programado: el lote sigue esperando (nada se muestra mientras hay un hold).
+            if (this._rewardHolds.size) return;
+            const cards = this._buildRewardSequence(fb.batch);
+            fb.batch = [];
+            fb.queue.push(...cards);
+            if (!fb.active) this._showNextReward();
+        },
+
+        // Lote → como mucho 2 cards: [sticker (+⭐), Arcoíris]. El sticker es protagonista y la estrella va de insignia.
+        _buildRewardSequence(batch) {
+            const seen = new Set();
+            const stickers = [];
+            let star = false;
+            const custom = [];
+            batch.forEach(r => {
+                if (r.type === 'star') star = true;
+                else if (r.type === 'sticker' && !seen.has(r.id)) { seen.add(r.id); stickers.push(r); }
+                else if (r.type === 'custom') custom.push(r);
             });
-            
-            setTimeout(() => {
-                overlay.style.opacity = '0';
-                setTimeout(() => {
-                    if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
-                }, 400);
-            }, 1500);
+            const normal = stickers.filter(s => !s.special);
+            const special = stickers.find(s => s.special);
+
+            const cards = [];
+            if (normal.length) cards.push({ ...normal[0], withStar: star });
+            else if (star && !special) cards.push({ type: 'star' });
+            if (special) cards.push({ ...special, withStar: star && !normal.length });
+            // Dos stickers normales en la misma acción no pasa hoy; si pasara, el segundo ocupa el lugar libre.
+            if (cards.length < 2 && normal.length > 1) cards.push({ ...normal[1], withStar: false });
+            return cards.concat(custom);
+        },
+
+        _showNextReward() {
+            const fb = this._rewardFeedback;
+            const card = fb.queue.shift();
+            if (!card) { fb.active = null; this._notifyRewardIdle(); return; }
+            const el = this._renderRewardCard(card);
+            fb.active = el;
+            document.body.appendChild(el);
+            void el.offsetWidth; // aparece por transición de CSS (sin requestAnimationFrame: funciona con la pestaña oculta)
+            el.classList.add('reward-overlay--visible');
+            // 8D.2C: la card ya no toca al guía (reacciona en el Home) y su sonido lo decide SofiApp.celebration:
+            // estrella = nivel 1, sticker = 2, Arcoíris = 3. Si ya hay una celebración de nivel igual o mayor, suena esa sola.
+            const level = card.type === 'sticker' ? (card.special ? 3 : 2) : 1;
+            if (SofiApp.celebration) {
+                SofiApp.celebration.play({ level, event: card.special ? 'collectionComplete' : null, source: 'rewards' });
+            } else if (SofiApp.audio) {
+                SofiApp.audio.success();
+            }
+
+            const hide = setTimeout(() => {
+                el.classList.remove('reward-overlay--visible');
+                const remove = setTimeout(() => {
+                    fb.timers = [];
+                    if (el.parentNode) el.parentNode.removeChild(el);
+                    this._showNextReward(); // la siguiente entra recién cuando la anterior ya no está
+                }, this.REWARD_CARD_FADE_MS);
+                fb.timers = [remove];
+            }, this.REWARD_CARD_VISIBLE_MS);
+            fb.timers = [hide];
+        },
+
+        // 8D.2C: avisos de "cola libre" para SofiApp.rewards.whenIdle (una sola vez cada uno)
+        _idleSubscribers: new Set(),
+
+        _isRewardBusy() {
+            const fb = this._rewardFeedback;
+            return fb.batch.length > 0 || !!fb.flushTimer || fb.queue.length > 0 || !!fb.active;
+        },
+
+        _notifyRewardIdle() {
+            if (this._isRewardBusy() || this._idleSubscribers.size === 0) return;
+            const subscribers = Array.from(this._idleSubscribers);
+            this._idleSubscribers.clear();
+            subscribers.forEach(cb => {
+                try { cb(); } catch (e) { console.error('[SofiApp] Error in rewards.whenIdle callback', e); }
+            });
+        },
+
+        _renderRewardCard(card) {
+            const el = document.createElement('div');
+            el.className = 'reward-overlay';
+            el.setAttribute('role', 'status');
+            el.setAttribute('aria-live', 'polite');
+
+            let asset, emoji, text, name = null;
+            if (card.type === 'star') {
+                asset = '/assets/icons/shared/icon-star.webp'; emoji = '⭐'; text = '¡Una estrella!';
+            } else if (card.type === 'custom') {
+                asset = card.asset; emoji = card.emoji; text = card.text;
+            } else {
+                asset = card.asset; emoji = card.emoji; name = card.name;
+                text = card.special ? '¡Juntaste todo!' : '¡Nuevo sticker!';
+                el.classList.add(card.special ? 'reward-overlay--special' : 'reward-overlay--sticker');
+            }
+
+            const visual = document.createElement('div');
+            visual.className = 'reward-overlay__visual';
+            const emojiNode = () => {
+                const span = document.createElement('span');
+                span.className = 'reward-overlay__emoji';
+                span.setAttribute('aria-hidden', 'true');
+                span.textContent = emoji || '✨';
+                return span;
+            };
+            if (asset) {
+                const img = document.createElement('img');
+                img.src = asset;
+                img.alt = '';
+                img.setAttribute('aria-hidden', 'true');
+                img.className = 'reward-overlay__icon-image';
+                img.onerror = () => img.replaceWith(emojiNode()); // sin imagen, queda el emoji: la card nunca queda vacía
+                visual.appendChild(img);
+            } else {
+                visual.appendChild(emojiNode());
+            }
+            if (card.withStar) {
+                const badge = document.createElement('img');
+                badge.src = '/assets/icons/shared/icon-star.webp';
+                badge.alt = '';
+                badge.setAttribute('aria-hidden', 'true');
+                badge.className = 'reward-overlay__badge';
+                visual.appendChild(badge);
+            }
+            if (card.special) {
+                const sparkle = document.createElement('img');
+                sparkle.src = '/assets/icons/shared/icon-sparkle.webp';
+                sparkle.alt = '';
+                sparkle.setAttribute('aria-hidden', 'true');
+                sparkle.className = 'reward-overlay__sparkle';
+                visual.appendChild(sparkle);
+            }
+            el.appendChild(visual);
+
+            const msg = document.createElement('div');
+            msg.className = 'reward-overlay__text';
+            msg.textContent = text;
+            el.appendChild(msg);
+            if (name) {
+                const nameEl = document.createElement('div');
+                nameEl.className = 'reward-overlay__name';
+                nameEl.textContent = name;
+                el.appendChild(nameEl);
+            }
+            return el;
+        }
+    },
+
+    // 8D.2C: lectura mínima de la cola de rewards para coordinar otras capas (guía, celebraciones). No la modifica.
+    rewards: {
+        isBusy() {
+            return SofiApp.progress._isRewardBusy();
+        },
+
+        // Llama a cb una sola vez cuando la cola queda libre (en el próximo tick si ya lo está). Devuelve unsubscribe.
+        whenIdle(cb) {
+            const progress = SofiApp.progress;
+            let done = false;
+            const fire = () => {
+                if (done) return;
+                if (progress._isRewardBusy()) { progress._idleSubscribers.add(fire); return; }
+                done = true;
+                try { cb(); } catch (e) { console.error('[SofiApp] Error in rewards.whenIdle callback', e); }
+            };
+            if (progress._isRewardBusy()) progress._idleSubscribers.add(fire);
+            else setTimeout(fire, 0);
+            return () => { done = true; progress._idleSubscribers.delete(fire); };
         }
     },
 
     world: {
         pendingReaction: null,
+        _reactionWait: null, // 8D.2C: unsubscribe mientras la reacción espera a que terminen las cards
         ambientTimer: null,
         ambientComposition: [],
         guideTimer: null,
@@ -561,8 +823,21 @@ window.SofiApp = {
             window.scrollTo(0, 0);
 
             if (this.pendingReaction) {
-                this.playReaction(this.pendingReaction);
-                this.pendingReaction = null;
+                // 8D.2C: si todavía hay cards de premio, el guía espera a que terminen (y solo si seguimos en el Home).
+                // Si Sofi se va antes, la reacción queda pendiente para la próxima vez.
+                if (SofiApp.rewards && SofiApp.rewards.isBusy()) {
+                    if (!this._reactionWait) {
+                        this._reactionWait = SofiApp.rewards.whenIdle(() => {
+                            this._reactionWait = null;
+                            if (SofiApp.state.currentView !== 'menu' || !this.pendingReaction) return;
+                            this.playReaction(this.pendingReaction);
+                            this.pendingReaction = null;
+                        });
+                    }
+                } else {
+                    this.playReaction(this.pendingReaction);
+                    this.pendingReaction = null;
+                }
             } else {
                 const recentActivity = SofiApp.session.consumePendingHomeReaction();
                 if (recentActivity) {
@@ -588,6 +863,7 @@ window.SofiApp = {
         },
         
         onHomeExit() {
+            if (this._reactionWait) { this._reactionWait(); this._reactionWait = null; }
             this.stopAmbient();
             this.stopHomeDiscoveries();
             this.hideBubble();
@@ -615,7 +891,12 @@ window.SofiApp = {
             };
             const cardId = sourceToCard[reaction.source];
             
-            if (reaction.type === 'sticker') {
+            if (reaction.type === 'collection') {
+                this.setGuideState('celebrate', { duration: 3000 });
+                this.showBubble('¡Juntaste todo! 🌈');
+                this.showTemporaryParticle(guide, reaction.emoji || '🌈', 'particle-special');
+                this.animateCard('btn-collection');
+            } else if (reaction.type === 'sticker') {
                 this.setGuideState('celebrate', { duration: 3000 });
                 this.showBubble('¡Algo nuevo! 🎁');
                 this.showTemporaryParticle(guide, reaction.emoji || '✨', 'particle-special');

@@ -1526,6 +1526,56 @@ header h1 {
     text-align: center;
 }
 
+/* 8D.1F: card única de la cola de premios (app-core.js). Sticker protagonista; la estrella va de insignia. */
+.reward-overlay {
+    box-sizing: border-box;
+    width: max-content; /* con left: 50% el ancho automático se limitaba a medio viewport y el texto se partía */
+    max-width: calc(100vw - 32px);
+    max-height: calc(100vh - 32px);
+    gap: 6px;
+}
+.reward-overlay__visual { position: relative; display: flex; align-items: center; justify-content: center; }
+.reward-overlay--sticker .reward-overlay__icon-image,
+.reward-overlay--special .reward-overlay__icon-image { width: 128px; height: 128px; }
+.reward-overlay__badge {
+    position: absolute;
+    right: -10px;
+    bottom: -6px;
+    width: 42px;
+    height: 42px;
+    object-fit: contain;
+}
+.reward-overlay__sparkle {
+    position: absolute;
+    top: -12px;
+    right: -18px;
+    width: 40px;
+    height: 40px;
+    object-fit: contain;
+}
+.reward-overlay__name {
+    font-size: 1.2rem;
+    font-weight: 800;
+    color: var(--color-text-soft);
+    font-family: 'Nunito', sans-serif;
+}
+.reward-overlay--special {
+    background: linear-gradient(135deg, rgba(255, 224, 230, 0.97), rgba(255, 243, 196, 0.97), rgba(224, 247, 233, 0.97), rgba(227, 240, 255, 0.97));
+    border: 4px solid #fff;
+    /* 8D.2E: L3 un escalón arriba de la card de sticker con un halo dorado estático (no cambia el tamaño). */
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.2), 0 0 0 6px rgba(255, 213, 79, 0.35), 0 0 28px rgba(255, 213, 79, 0.45);
+}
+@media (max-height: 600px) and (orientation: landscape) {
+    .reward-overlay { padding: var(--space-md); }
+    .reward-overlay__icon-image { width: 64px; height: 64px; }
+    .reward-overlay--sticker .reward-overlay__icon-image,
+    .reward-overlay--special .reward-overlay__icon-image { width: 88px; height: 88px; }
+    .reward-overlay__emoji { font-size: 4rem; margin-bottom: 0; }
+    .reward-overlay__text { font-size: 1.5rem; }
+    .reward-overlay__name { font-size: 1rem; }
+    .reward-overlay__badge { width: 32px; height: 32px; }
+}
+
 /* Success Pop (Collection, Selection) */
 .is-popped {
     animation: successPop var(--motion-normal) var(--ease-bounce);
@@ -1843,4 +1893,246 @@ body.is-home {
         line-height: 1.2;
         margin-bottom: 6px;
     }
+}
+
+/* --- 8D.1C: MIS COSAS 2.0 ---
+   Cards por juego generadas por collection.js. Selectores propios (.collection-*): no reusar .collection-card ni
+   .collection-grid, que comparten reglas con el selector de dibujos de Pintar. */
+/* 8D.1D: patrón de álbum (tile de 512x512 que se muestra a 256px). Si no carga, queda la superficie blanca. */
+#collection-container {
+    background: url('/assets/backgrounds/collection/collection-bg-tile.webp') 0 0 / 256px 256px repeat, var(--color-surface);
+}
+.collection-header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: var(--space-sm) var(--space-md);
+    margin-bottom: var(--space-sm);
+}
+.collection-title {
+    margin: 0;
+    font-size: clamp(1.8rem, 6vw, 2.4rem);
+    line-height: 1.1;
+    font-weight: 800;
+    color: var(--color-text);
+}
+.collection-stars {
+    margin-bottom: 0;
+    padding: 4px 14px;
+    font-size: 1.4rem;
+}
+.collection-stars .stars-pill__icon-image { width: 28px; height: 28px; }
+
+/* Igual que Pintar (8C.4.0): con `center`, lo que no entra desborda hacia arriba y no se puede scrollear. */
+#collection-container > main.collection-main {
+    justify-content: flex-start;
+    justify-content: safe center;
+    align-items: stretch;
+    padding: 4px 2px 8px;
+}
+.collection-games {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+    width: 100%;
+}
+.collection-special { width: 100%; margin-top: 12px; }
+@media (min-width: 700px) {
+    .collection-games { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* Card: un único botón (identidad | progreso | sticker) */
+.collection-game {
+    --collection-color: var(--game-collection);
+    --collection-soft: #fff8e1;
+    --collection-token: 22px;
+    --collection-tile: 40px;
+    appearance: none;
+    -webkit-tap-highlight-color: transparent;
+    font: inherit;
+    color: inherit;
+    text-align: center;
+    cursor: pointer;
+    width: 100%;
+    min-height: 140px;
+    padding: 10px 12px;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    background: linear-gradient(180deg, var(--collection-soft), var(--color-surface));
+    border: 3px solid transparent;
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-soft);
+    animation: collectionEnter 320ms var(--ease-soft) both;
+    animation-delay: calc(var(--i, 0) * 50ms);
+}
+.collection-game--differences { --collection-color: var(--game-differences); --collection-soft: var(--game-differences-soft); }
+.collection-game--painting { --collection-color: var(--game-painting); --collection-soft: var(--game-painting-soft); }
+.collection-game--maze { --collection-color: var(--game-maze); --collection-soft: var(--game-maze-soft); }
+.collection-game--cat { --collection-color: var(--game-cat); --collection-soft: var(--game-cat-soft); }
+.collection-game--memory { --collection-color: var(--game-memory); --collection-soft: var(--game-memory-soft); }
+.collection-game:focus-visible { outline: 3px solid var(--collection-color); outline-offset: 2px; }
+.collection-game.is-complete {
+    border-color: var(--collection-color);
+    box-shadow: var(--shadow-card);
+}
+@keyframes collectionEnter {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: none; }
+}
+
+.collection-game__identity { display: flex; }
+.collection-game__icon { width: 60px; height: 60px; object-fit: contain; }
+.collection-game__icon.is-hopping { animation: collectionHop 420ms var(--ease-bounce); }
+@keyframes collectionHop {
+    0%, 100% { transform: translateY(0); }
+    40% { transform: translateY(-12px) scale(1.08); }
+}
+
+/* Progreso: una estrella por evento. Hecho = estrella a color; pendiente = hueco punteado con estrella gris */
+.collection-game__progress {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-content: center;
+    gap: 6px;
+    min-width: 0;
+}
+.collection-progress--differences,
+.collection-progress--memory {
+    display: grid;
+    grid-template-columns: repeat(5, var(--collection-token));
+    justify-content: center;
+    gap: 4px;
+}
+.collection-progress--maze,
+.collection-progress--painting {
+    display: grid;
+    grid-template-columns: repeat(3, var(--collection-tile));
+    justify-content: center;
+    gap: 5px;
+}
+.collection-token {
+    position: relative;
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+.collection-token img { display: block; }
+.collection-token--star { width: var(--collection-token); height: var(--collection-token); border-radius: 50%; }
+.collection-token--star img { width: 100%; height: 100%; object-fit: contain; }
+.collection-token--star.is-pending { border: 2px dashed rgba(0, 0, 0, 0.2); }
+.collection-token--star.is-pending img { filter: grayscale(1); opacity: 0.3; transform: scale(0.6); }
+.collection-token--drawing, .collection-token--world { width: var(--collection-tile); height: var(--collection-tile); }
+.collection-token__image { width: 100%; height: 100%; object-fit: cover; border-radius: 10px; }
+.collection-token--drawing .collection-token__image { object-fit: contain; background: #fff; border: 2px solid #fff; box-sizing: border-box; box-shadow: var(--shadow-soft); }
+.collection-token--drawing.is-pending, .collection-token--world.is-pending { outline: 2px dashed rgba(0, 0, 0, 0.2); outline-offset: 1px; border-radius: 10px; }
+.collection-token.is-pending .collection-token__image { filter: grayscale(1); opacity: 0.35; box-shadow: none; }
+.collection-token__badge { position: absolute; right: -6px; bottom: -6px; width: 20px; height: 20px; }
+
+/* Sticker: ganado = a color, borde blanco, sombra e inclinación; pendiente = silueta gris con ✨ */
+.collection-sticker {
+    flex: none;
+    width: 88px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+.collection-sticker__visual {
+    position: relative;
+    width: 76px;
+    height: 76px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+}
+.collection-sticker__image { width: 62px; height: 62px; object-fit: contain; }
+.collection-sticker__emoji { font-size: 46px; line-height: 1; }
+.collection-sticker.is-earned .collection-sticker__visual {
+    background: #fff;
+    box-shadow: 0 0 0 4px #fff, var(--shadow-card);
+    transform: rotate(-4deg);
+}
+.collection-game:nth-child(even) .collection-sticker.is-earned .collection-sticker__visual { transform: rotate(4deg); }
+.collection-sticker.is-pending .collection-sticker__visual { background: rgba(255, 255, 255, 0.6); border: 2px dashed rgba(0, 0, 0, 0.15); }
+.collection-sticker.is-pending .collection-sticker__image,
+.collection-sticker.is-pending .collection-sticker__emoji { filter: grayscale(1); opacity: 0.4; } /* 0.4: las ilustraciones con detalle (8D.1D) se perdían a 0.3 */
+.collection-sticker__hint { position: absolute; top: -4px; right: -4px; width: 22px; height: 22px; opacity: 0.85; }
+.collection-sticker__name { font-size: 0.9rem; font-weight: 800; line-height: 1.1; color: var(--color-text); }
+.collection-sticker.is-shining .collection-sticker__visual { animation: collectionShine 600ms ease; }
+@keyframes collectionShine {
+    0%, 100% { transform: scale(1); filter: none; }
+    45% { transform: scale(1.1); filter: brightness(1.15) drop-shadow(0 0 8px rgba(255, 213, 79, 0.9)); }
+}
+.collection-sparkle {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    font-size: 18px;
+    pointer-events: none;
+    animation: collectionSparkle 650ms ease-out both;
+}
+@keyframes collectionSparkle {
+    from { opacity: 1; transform: translate(-50%, -50%) scale(0.4); }
+    to { opacity: 0; transform: translate(-50%, -50%) var(--collection-sparkle-to) scale(1.1); }
+}
+
+/* Arcoíris: card especial a todo el ancho, con los 5 juegos que hacen falta */
+.collection-game--special {
+    grid-template-columns: auto minmax(0, 1fr);
+    min-height: 120px;
+}
+.collection-sticker--special { width: 110px; }
+.collection-sticker--special .collection-sticker__visual { width: 90px; height: 90px; }
+.collection-sticker--special .collection-sticker__image { width: 78px; height: 78px; }
+.collection-special__requires { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.collection-special__req img { width: 40px; height: 40px; object-fit: contain; }
+.collection-special__req.is-pending img { filter: grayscale(1); opacity: 0.35; }
+.collection-game--special.is-earned {
+    background: linear-gradient(135deg, #ffe0e6, #fff3c4, #e0f7e9, #e3f0ff, #f3e5f5);
+    border-color: #fff;
+    box-shadow: var(--shadow-card);
+}
+/* 8D.2E: colección completa = acento estático y suave en la card de Arcoíris (un anillo dorado por dentro y un
+   halo en el sticker). Sin animación, sin assets y sin cambiar el box: el texto "obtenido" y el sticker siguen
+   siendo lo que comunica el estado. */
+#collection-container.is-collection-complete .collection-game--special.is-earned {
+    box-shadow: inset 0 0 0 3px rgba(255, 213, 79, 0.55), var(--shadow-card);
+}
+#collection-container.is-collection-complete .collection-sticker--special .collection-sticker__visual {
+    box-shadow: 0 0 0 4px #fff, 0 0 14px 2px rgba(255, 213, 79, 0.6);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .collection-game,
+    .collection-game__icon.is-hopping,
+    .collection-sticker.is-shining .collection-sticker__visual { animation: none !important; }
+    .collection-sparkle { display: none; }
+}
+
+/* Landscape bajo: mismo patrón que 8C.5B.1 / 8C.5E (tope de alto, header en una fila, 2 columnas) */
+@media (max-height: 600px) and (orientation: landscape) {
+    #collection-container {
+        max-height: calc(100vh - 16px);
+        padding: 8px 12px;
+    }
+    /* min-height: las cards arrancan debajo del botón 🏠 Menú (fijo, hasta y≈63) y no quedan tapadas */
+    .collection-header { flex-wrap: nowrap; gap: 12px; margin-bottom: 6px; min-height: 46px; }
+    .collection-title { font-size: 1.3rem; }
+    .collection-stars { padding: 2px 10px; font-size: 1.1rem; }
+    .collection-stars .stars-pill__icon-image { width: 22px; height: 22px; }
+    .collection-games { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .collection-special { margin-top: 8px; }
+    .collection-game { min-height: 112px; padding: 6px 10px; gap: 8px; }
+    .collection-game__icon { width: 44px; height: 44px; }
+    .collection-sticker { width: 76px; }
+    .collection-sticker__visual { width: 64px; height: 64px; }
+    .collection-sticker__image { width: 52px; height: 52px; }
+    .collection-sticker__emoji { font-size: 38px; }
+    .collection-game--special { min-height: 96px; }
 }

@@ -231,36 +231,9 @@ function playDifferenceSound(type) {
         gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
         osc.connect(gain); gain.connect(audioCtx.destination);
         osc.start(); osc.stop(audioCtx.currentTime + 0.2);
-    } else if (type === 'levelComplete') {
-        osc.type = 'square';
-        osc.frequency.setValueAtTime(400, audioCtx.currentTime);
-        osc.frequency.setValueAtTime(600, audioCtx.currentTime + 0.1);
-        gain.gain.setValueAtTime(0, audioCtx.currentTime);
-        gain.gain.linearRampToValueAtTime(0.05, audioCtx.currentTime + 0.05);
-        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.25);
-        osc.connect(gain); gain.connect(audioCtx.destination);
-        osc.start(); osc.stop(audioCtx.currentTime + 0.25);
-    } else if (type === 'milestone') {
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(500, audioCtx.currentTime);
-        osc.frequency.setValueAtTime(800, audioCtx.currentTime + 0.1);
-        osc.frequency.setValueAtTime(1200, audioCtx.currentTime + 0.2);
-        gain.gain.setValueAtTime(0, audioCtx.currentTime);
-        gain.gain.linearRampToValueAtTime(0.08, audioCtx.currentTime + 0.05);
-        gain.gain.linearRampToValueAtTime(0.08, audioCtx.currentTime + 0.25);
-        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.4);
-        osc.connect(gain); gain.connect(audioCtx.destination);
-        osc.start(); osc.stop(audioCtx.currentTime + 0.4);
-    } else if (type === 'final') {
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(400, audioCtx.currentTime);
-        osc.frequency.linearRampToValueAtTime(800, audioCtx.currentTime + 0.5);
-        gain.gain.setValueAtTime(0, audioCtx.currentTime);
-        gain.gain.linearRampToValueAtTime(0.1, audioCtx.currentTime + 0.2);
-        gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.8);
-        osc.connect(gain); gain.connect(audioCtx.destination);
-        osc.start(); osc.stop(audioCtx.currentTime + 0.8);
     }
+    // 8D.2E: se sacaron 'levelComplete', 'milestone' y 'final' (sin llamadas desde 8D.2D.2: la ronda, el hito y el
+    // final suenan con SofiApp.celebration). Quedan los sonidos locales del juego: tap, success y error.
 }
 
 function initGame1Phaser() {
@@ -460,7 +433,18 @@ class FindDifferenceScene extends Phaser.Scene {
         this.cardContainersGroup = this.add.group();
         this.correctContainers = [];
         this.foundCount = 0;
-        
+
+        // 8D.3D.3: hold del feedback de premios de esta ronda (ver handleAnswer). Si la escena se cierra con el hold
+        // activo, se suelta: el progreso ya está guardado y sus cards no pueden quedar retenidas.
+        this.progressRewardHold = null;
+        const onClose = () => {
+            this.events.off('shutdown', onClose);
+            this.events.off('destroy', onClose);
+            this.releaseProgressRewardHold();
+        };
+        this.events.once('shutdown', onClose);
+        this.events.once('destroy', onClose);
+
         const isSpecial = !!this.levelData.special;
         
         if (this.levelData.type === 'findAll') {
@@ -472,7 +456,16 @@ class FindDifferenceScene extends Phaser.Scene {
                this.numDifferent = this.levelData.options.filter(it => it.isCorrect).length;
             }
         } else {
-            this.numDifferent = isSpecial ? 2 : 1;
+            const requested = isSpecial ? 2 : 1;
+            // 8D.2D.0A: las escenas tienen objetos fijos; nunca pedir más diferencias de las que hay
+            // (cat-ocean tiene un solo 🚗: en una ronda sorpresa pedía 2 y no se podía terminar).
+            // La grilla genera tantas diferencias como pide, así que no se limita.
+            if (Array.isArray(this.levelData.items)) {
+                const available = this.levelData.items.filter(it => it.isCorrect ?? it.isDifferent).length;
+                this.numDifferent = Math.min(requested, available);
+            } else {
+                this.numDifferent = requested;
+            }
         }
         
         if (this.presentation === 'scene') {
@@ -874,21 +867,45 @@ class FindDifferenceScene extends Phaser.Scene {
             
             if (isLevelComplete) {
                 this.isLocked = true;
+
+                // 8D.3D.3: se encontró la última diferencia pedida: la ronda ya está ganada. Se guarda acá (evento + ⭐;
+                // en la última, también Detective y Arcoíris si es el 5.º sticker), así salir antes del cartel o del hito
+                // no pierde nada. Las cards quedan retenidas hasta el punto de siempre (advanceLevel).
+                const isFinalRound = currentDiffLevel === currentAdventure.length - 1;
+                if (SofiApp.progress) {
+                    if (SofiApp.progress.holdRewardFeedback) this.progressRewardHold = SofiApp.progress.holdRewardFeedback();
+                    SofiApp.progress.recordEvent(`differences-level-${currentDiffLevel + 1}`);
+                    if (isFinalRound) SofiApp.progress.unlockSticker('detective');
+                }
+
                 playDifferenceSound('success');
                 if (typeof window.speechSynthesis !== 'undefined') window.speechSynthesis.cancel();
-                
-                const messages = ['¡MUY BIEN!', '¡GENIAL!', '¡EXCELENTE!', '¡BRAVO!', '¡QUÉ BIEN!', '¡LO ENCONTRASTE!'];
-                const randomMsg = Phaser.Math.RND.pick(messages);
-                
-                const msg = this.add.text(400, 500, randomMsg, {
+
+                // 8D.2D.2: rondas 1-9 = L1 (cue1 + una frase). El cartel muestra la misma frase que se dice.
+                // La ronda 10 queda en silencio: su momento audible es el L2 de la aventura.
+                let msgText = null;
+                if (!isFinalRound && SofiApp.celebration) {
+                    const result = SofiApp.celebration.play({ level: 1, event: 'differences.roundComplete', source: 'differences' });
+                    if (result && result.text) msgText = result.text.toUpperCase();
+                }
+                if (!msgText) {
+                    const messages = ['¡MUY BIEN!', '¡GENIAL!', '¡EXCELENTE!', '¡BRAVO!', '¡QUÉ BIEN!', '¡LO ENCONTRASTE!'];
+                    msgText = Phaser.Math.RND.pick(messages);
+                }
+                const reduced = SofiApp.motion && SofiApp.motion.reduced;
+
+                const msg = this.add.text(400, 500, msgText, {
                     fontSize: '80px', color: '#ffb3ba', fontFamily: 'Nunito, sans-serif', stroke: '#fff', strokeThickness: 10, fontStyle: 'bold'
-                }).setOrigin(0.5).setScale(0);
+                }).setOrigin(0.5);
                 msg.setDepth(100);
-                
+                // Sin movimiento reducido: aparece con un salto; con movimiento reducido, solo opacidad. ~1.6 s en total:
+                // un poco más que la ventana del L1 (1.5 s), así la card de estrella que sigue suena siempre como su
+                // propio tiempo, en vez de depender de qué frame termina primero.
+                if (reduced) msg.setAlpha(0); else msg.setScale(0);
+
                 this.tweens.add({
-                    targets: msg, scale: 1, duration: 500, ease: 'Back.out', yoyo: true, hold: 1200,
+                    targets: msg, ...(reduced ? { alpha: 1 } : { scale: 1, ease: 'Back.out' }), duration: 350, yoyo: true, hold: 900,
                     onComplete: () => {
-                        playDifferenceSound('levelComplete');
                         const isMilestone = (currentDiffLevel === 2 || currentDiffLevel === 5 || currentDiffLevel === 8);
                         if (isMilestone) {
                             this.showMilestone(currentDiffLevel, () => this.advanceLevel());
@@ -924,34 +941,63 @@ class FindDifferenceScene extends Phaser.Scene {
     }
     
     advanceLevel() {
-        if (typeof window.speechSynthesis !== 'undefined') window.speechSynthesis.cancel();
-        
-        if (SofiApp.progress) {
-            SofiApp.progress.recordEvent(`differences-level-${currentDiffLevel + 1}`);
-        }
-        
+        // 8D.2D.2: ya no se corta la voz acá (cortaba la frase del L1). La siguiente consigna cancela lo que haya,
+        // y al salir del juego la navegación corta todo.
+        // 8D.3D.3: el punto de siempre de las cards. Los premios ya se guardaron en handleAnswer; acá solo se suelta
+        // su feedback (el flush llega en el próximo tick, igual que antes).
+        this.releaseProgressRewardHold();
+
         currentDiffLevel++;
         if (currentDiffLevel < currentAdventure.length) {
-            this.scene.restart();
+            this.restartWhenRewardsIdle();
         } else {
-            if (SofiApp.progress) {
-                SofiApp.progress.unlockSticker('detective');
+            // 8D.2D.2: L2 en el mismo bloque síncrono que el feedback de los premios (la card de Detective queda en
+            // silencio y Arcoíris, si llega, la reemplaza con L3).
+            if (SofiApp.celebration) {
+                SofiApp.celebration.play({ level: 2, event: 'differences.adventureComplete', source: 'differences' });
             }
             this.scene.start('FinalCelebrationScene1');
         }
     }
-    
+
+    // 8D.3D.3: suelta el hold de esta ronda (idempotente; si la navegación ya lo soltó, el core devuelve false).
+    releaseProgressRewardHold() {
+        const hold = this.progressRewardHold;
+        this.progressRewardHold = null;
+        if (hold && SofiApp.progress && SofiApp.progress.releaseRewardFeedback) SofiApp.progress.releaseRewardFeedback(hold);
+    }
+
+    // 8D.2D.2: la consigna de la ronda siguiente no arranca debajo de la card de estrella
+    // (en las rondas de memoria taparía lo que hay que mirar). Sin card (rejugar), sigue igual que antes.
+    // Si la escena se cierra mientras espera, no revive.
+    restartWhenRewardsIdle() {
+        if (!SofiApp.rewards || !SofiApp.rewards.isBusy()) {
+            this.scene.restart();
+            return;
+        }
+        const unsubscribe = SofiApp.rewards.whenIdle(() => {
+            this.events.off('shutdown', cancelWait);
+            this.events.off('destroy', cancelWait);
+            if (this.sys && this.scene.isActive()) this.scene.restart();
+        });
+        const cancelWait = () => unsubscribe();
+        this.events.once('shutdown', cancelWait);
+        this.events.once('destroy', cancelWait);
+    }
+
     showMilestone(levelNumber, onComplete) {
-        playDifferenceSound('milestone');
+        // 8D.2D.2: el hito ya no suena: el sonido de la ronda es el cue del L1 (y después la card de estrella).
         let icon = '⭐';
         if (levelNumber === 5) icon = '🌈';
         if (levelNumber === 8) icon = '🎁';
-        
-        const milestone = this.add.text(400, 500, icon, { fontSize: '150px' }).setOrigin(0.5).setScale(0);
+        const reduced = SofiApp.motion && SofiApp.motion.reduced;
+
+        const milestone = this.add.text(400, 500, icon, { fontSize: '150px' }).setOrigin(0.5);
         milestone.setDepth(150);
-        
+        if (reduced) milestone.setAlpha(0).setScale(1.5); else milestone.setScale(0);
+
         this.tweens.add({
-            targets: milestone, scale: 1.5, duration: 600, yoyo: true, hold: 800, ease: 'Back.out', onComplete: onComplete
+            targets: milestone, ...(reduced ? { alpha: 1 } : { scale: 1.5, ease: 'Back.out' }), duration: 600, yoyo: true, hold: 800, onComplete: onComplete
         });
     }
     
@@ -973,8 +1019,10 @@ class FinalCelebrationScene1 extends Phaser.Scene {
     }
 
     create() {
-        if (typeof window.speechSynthesis !== 'undefined') window.speechSynthesis.cancel();
-        
+        // 8D.2D.2: el sonido y la frase del final los pone SofiApp.celebration (L2) desde advanceLevel.
+        // No se cancela la voz acá: cortaría esa frase, que empezó un frame antes.
+        const reduced = SofiApp.motion && SofiApp.motion.reduced;
+
         this.cameras.main.setBackgroundColor('#ffdfba');
         
         const cx = 400; const cy = 500;
@@ -988,23 +1036,24 @@ class FinalCelebrationScene1 extends Phaser.Scene {
         const dog = this.add.text(cx, cy - 50, '🦊', { fontSize: '120px' }).setOrigin(0.5);
         const sun = this.add.text(cx + 150, cy - 50, '🚀', { fontSize: '120px' }).setOrigin(0.5);
         
-        this.tweens.add({
-            targets: [apple, dog, sun], y: cy - 80, duration: 500, yoyo: true, repeat: -1, delay: this.tweens.stagger(200)
-        });
-        
-        this.time.addEvent({
-            delay: 200,
-            callback: () => {
-                const emojis = ['⭐', '❤️', '🎉', '🌸', '✨'];
-                const p = this.add.text(Phaser.Math.Between(50, 750), 1050, Phaser.Math.RND.pick(emojis), { fontSize: '50px' }).setOrigin(0.5);
-                this.tweens.add({
-                    targets: p, y: -50, x: p.x + Phaser.Math.Between(-150, 150), duration: 3000, angle: 360, onComplete: () => p.destroy()
-                });
-            },
-            callbackScope: this, loop: true
-        });
-        
-        speakDifferenceInstruction("¡Muy bien Sofi! ¡Terminaste la aventura!");
+        // Con movimiento reducido la escena queda fija: sin saltitos ni lluvia de emojis.
+        if (!reduced) {
+            this.tweens.add({
+                targets: [apple, dog, sun], y: cy - 80, duration: 500, yoyo: true, repeat: -1, delay: this.tweens.stagger(200)
+            });
+
+            this.time.addEvent({
+                delay: 200,
+                callback: () => {
+                    const emojis = ['⭐', '❤️', '🎉', '🌸', '✨'];
+                    const p = this.add.text(Phaser.Math.Between(50, 750), 1050, Phaser.Math.RND.pick(emojis), { fontSize: '50px' }).setOrigin(0.5);
+                    this.tweens.add({
+                        targets: p, y: -50, x: p.x + Phaser.Math.Between(-150, 150), duration: 3000, angle: 360, onComplete: () => p.destroy()
+                    });
+                },
+                callbackScope: this, loop: true
+            });
+        }
 
         const btnBg = this.add.rectangle(cx, cy + 250, 320, 80, 0x4caf50, 1).setInteractive({ useHandCursor: true });
         btnBg.setStrokeStyle(4, 0xffffff);

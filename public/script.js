@@ -45,51 +45,21 @@ if (btnCollection) {
     });
 }
 
-window.refreshProgressUI = function() {
+// Contador de estrellas del Home. Mis Cosas se dibuja aparte (collection.js).
+window.refreshHomeProgress = function() {
     if (!SofiApp.progress) return;
     const globalText = document.getElementById('global-stars-text');
     if (globalText) globalText.innerText = SofiApp.progress.state.stars;
-    
-    const collectionText = document.getElementById('collection-stars-text');
-    if (collectionText) collectionText.innerText = SofiApp.progress.state.stars;
-    
-    // Update stickers grid
-    const grid = document.getElementById('stickers-grid');
-    if (grid) {
-        grid.innerHTML = '';
-        Object.keys(SofiApp.progress.stickersConfig).forEach(id => {
-            const config = SofiApp.progress.stickersConfig[id];
-            const isUnlocked = SofiApp.progress.state.stickers.includes(id);
-            
-            const card = document.createElement('div');
-            card.className = isUnlocked ? 'collection-card collection-card--unlocked' : 'collection-card collection-card--locked';
-            
-            if (isUnlocked) {
-                const stickerVisual = config.asset
-                    ? `<img src="${config.asset}" alt="" aria-hidden="true" class="collection-card__icon-image">`
-                    : `<div class="collection-card__emoji">${config.emoji}</div>`;
-                card.innerHTML = `
-                    ${stickerVisual}
-                    <div style="font-size: 1rem; font-weight: bold; margin-top: 5px; color: var(--color-text);">${config.name}</div>
-                `;
-                card.addEventListener('click', () => {
-                    SofiApp.audio.tap();
-                    card.classList.add('is-popped'); setTimeout(() => card.classList.remove('is-popped'), 220);
-                });
-            } else {
-                card.innerHTML = `<div style="font-size: 3rem; opacity: 0.3;">❓</div>`;
-            }
-            grid.appendChild(card);
-        });
-    }
 };
 
-SofiApp.navigation.registerView('collection', {
-    onEnter: () => {
-        refreshProgressUI();
-    },
-    onExit: () => {}
-});
+// Wrapper compatible: app-core (awardStar y el bootstrap) llama a refreshProgressUI por nombre.
+// Mis Cosas solo se reconstruye si es la vista activa; si no, se dibuja al entrar (onEnter en collection.js).
+window.refreshProgressUI = function() {
+    window.refreshHomeProgress();
+    if (SofiApp.state.currentView === 'collection' && typeof window.renderCollection === 'function') {
+        window.renderCollection();
+    }
+};
 
 // --- VISTAS GLOBALES ---
 const endScreen2 = document.getElementById('end-screen-2');
@@ -101,9 +71,14 @@ SofiApp.navigation.registerView('drawing-selector', {
     onEnter: () => {
         drawingOptions.innerHTML = '';
         for (const [key, drawing] of Object.entries(gameDrawings)) {
+            // 8D.3E: un dibujo terminado lleva una ⭐ chica en la esquina. Sale solo del evento painting-<id>
+            // (no de las regiones pintadas, de Artista ni de las estrellas): un dibujo a medias no la lleva.
+            const events = (SofiApp.progress && SofiApp.progress.state && SofiApp.progress.state.events) || [];
+            const completed = events.includes(`painting-${key}`);
             const btn = document.createElement('button');
             btn.className = 'drawing-card ui-pressable';
-            btn.setAttribute('aria-label', `Pintar ${drawing.title}`);
+            btn.setAttribute('aria-label', `Pintar ${drawing.title}${completed ? ', ya lo terminaste' : ''}`);
+            if (completed) btn.style.position = 'relative';
             
             let previewHtml = '';
             if (drawing.originalImage) {
@@ -112,10 +87,14 @@ SofiApp.navigation.registerView('drawing-selector', {
                 previewHtml = `<span class="card-icon" style="pointer-events:none;">${drawing.icon}</span>`;
             }
             
+            const doneMarker = completed
+                ? '<img src="/assets/icons/shared/icon-star.webp" alt="" aria-hidden="true" class="drawing-card__done" width="34" height="34" style="position:absolute;top:6px;right:6px;width:34px;height:34px;pointer-events:none;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.25));">'
+                : '';
             btn.innerHTML = `
                 <div class="card-decor">✨</div>
                 ${previewHtml}
                 <span class="card-text" style="pointer-events:none;">${drawing.title.toUpperCase()}</span>
+                ${doneMarker}
             `;
             
             btn.addEventListener('click', (e) => {

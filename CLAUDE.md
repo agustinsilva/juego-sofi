@@ -1,6 +1,6 @@
 # Juegos Sofi
 
-Contexto operativo para Claude Code. Auditado contra el código el 2026-09-29 (versión `v1.24.0`, tras 8C.5).
+Contexto operativo para Claude Code. Auditado contra el código el 2026-10-02 (versión `v1.25.0`: 8D.1 y 8D.2 desplegadas el 2026-10-02; 8D.3 cerrada, sin desplegar ni commitear).
 Historial de fases y contexto previo: `GEMINI.md` (histórico, puede estar desactualizado).
 
 ## Project Overview
@@ -19,11 +19,11 @@ Textos y voz en español rioplatense (`es-AR`). SPA estática sin build step, ho
 
 - Vanilla HTML/CSS/JS con scripts clásicos (sin módulos, sin bundler, sin `package.json`). Todo comparte scope global.
 - Phaser `3.60.0` desde CDN (`cdn.jsdelivr.net`) en `index.html`.
-- Orden de carga (`public/index.html`): `drawings.js` → `app-core.js` → `script.js` → `game1.js` … `game5.js`.
+- Orden de carga (`public/index.html`): `drawings.js` → `app-core.js` → `celebration.js` → `script.js` → `collection.js` → `game1.js` … `game5.js`.
 - Cada pantalla es un `<div id="<view>-container">` que se muestra/oculta con la clase `hidden`.
-- Cada vista registra `onEnter`/`onExit` con `SofiApp.navigation.registerView(name, config)`. Vistas registradas: `menu` (app-core), `collection`, `drawing-selector`, `game2` (script.js), `game1`, `game3`, `game4`, `game5` (cada game*.js).
+- Cada vista registra `onEnter`/`onExit` con `SofiApp.navigation.registerView(name, config)`. Vistas registradas: `menu` (app-core), `collection` (collection.js), `drawing-selector`, `game2` (script.js), `game1`, `game3`, `game4`, `game5` (cada game*.js).
 - Cada juego crea su propia instancia `Phaser.Game` en `onEnter` y la destruye con `destroy(true)` en `onExit`.
-- Bootstrap: `DOMContentLoaded` en app-core → `progress.init()`, `world.init()`, `world.onHomeEnter()`, inyecta `#app-version`, `refreshProgressUI()`. `script.js` además llama `SofiApp.navigation.goTo('menu', { silent: true })` al final.
+- Bootstrap: `DOMContentLoaded` en app-core → `progress.init()` (load + reconciliación silenciosa, ver Mis Cosas 2.0), `world.init()`, `world.onHomeEnter()`, inyecta `#app-version`, `refreshProgressUI()`. `script.js` además llama `SofiApp.navigation.goTo('menu', { silent: true })` al final.
 
 ## Main Files
 
@@ -32,7 +32,9 @@ Textos y voz en español rioplatense (`es-AR`). SPA estática sin build step, ho
 | `public/index.html` | Todos los contenedores de vistas, Home, Mis Cosas, UI DOM de Pintar y Gatito |
 | `public/styles.css` | Design system (tokens `--color-*`, `--space-*`, `--radius-*`, `--motion-*`), Home, juegos, responsive |
 | `public/app-core.js` | `window.SofiApp` + constantes de Home (`HOME_DISCOVERIES`, `HOME_SESSION_FLAVORS`, `HOME_CONTEXT_CONNECTIONS`, `SOFI_GUIDE_ASSETS`) |
-| `public/script.js` | Crea el único `AudioContext`, wrappers legacy (`playSuccessSound`, `showMenu`…), `refreshProgressUI()`, vistas `collection` / `drawing-selector` / `game2` |
+| `public/script.js` | Crea el único `AudioContext`, wrappers legacy (`playSuccessSound`, `showMenu`…), `refreshHomeProgress()` / `refreshProgressUI()`, vistas `drawing-selector` / `game2` |
+| `public/celebration.js` | Celebration Core (8D.2C): `SofiApp.celebration`, `SofiApp.voice`, `SofiApp.motion` y el copy de celebraciones |
+| `public/collection.js` | Mis Cosas 2.0 (8D.1): modelo derivado, render, interacciones y vista `collection` |
 | `public/drawings.js` | `gameDrawings` (SVG de Pintar): `bitsy`, `buddy`, `sparks` (+ `originalImage` en `public/images/`) |
 | `public/game1.js` … `game5.js` | Un juego por archivo (ver Games) |
 | `firebase.json` / `.firebaserc` | Hosting de `public/`, proyecto `gaming-eb091` |
@@ -47,13 +49,14 @@ No productivos (no tocar sin pedido): `scratch_*.js` y los PNG de referencia en 
 | Diferencias | `game1.js` | `game1` | `game1Instance` | `recordEvent('differences-level-N')`, sticker `detective` |
 | Pintar | `game2.js` + `drawings.js` | `drawing-selector` → `game2` | `game2Instance` | `recordEvent('painting-<id>')`, sticker `artista` |
 | Laberinto | `game3.js` | `game3` | `mazeGameInstance` | `recordEvent('maze-level-N')`, sticker `exploradora` |
-| Mi Gatito | `game4.js` | `game4` | `catGameInstance` | `recordEvent('cat-milestone-N')` cada 5 cuidados, sticker `amiga` a los 15 |
-| Memoria | `game5.js` | `game5` | `game5Instance` | `recordEvent('memory-level-N')` (sin sticker) |
+| Mi Gatito | `game4.js` | `game4` | `catGameInstance` | `recordEvent('cat-milestone-5|10|15')` (desde 8D.3E, nada después de 15), sticker `amiga` a los 15 |
+| Memoria | `game5.js` | `game5` | `game5Instance` | `recordEvent('memory-level-N')`, sticker `memoriosa` al terminar la aventura (8D.1E) |
 
 - **Diferencias:** `challengePool` con tipos `object`, `color`, `orientation`, `size`, `category`, `memory`, `pattern`, `findAll`. `buildAdventure()` evita repetir los desafíos recientes (`juegosSofi_game1_adventure_v1`).
 - **Memoria:** `MEMORY_CHALLENGES` + `MEMORY_ROUND_TYPES` (`pairs`, `visualRecall`, `sequenceRecall`) → `buildMemoryAdventure()` arma 5 rondas de dificultad 1..5, evita repetir el tema anterior y la aventura anterior. Tiene hints propios. Canvas 800x800 FIT. Cartas en `createCard`: `Container` [frente, emoji, cover=[dorso, `coverIcon`]] con `hitArea` rectangular del tamaño de la carta; el giro tweenea `scaleX` del container y la pista, `container.scale` y `cover.alpha`.
   - **Visual (8C.3):** `MEMORY_ASSETS` (`memory-bg.webp`, `memory-card-back.webp`, `memory-card-front.webp` en `public/assets/backgrounds/memory/`), cargados en `MemoryScene.preload()` con guarda `textures.exists`. Fondo: imagen 800x800 en profundidad -10 (el color de cámara del tema queda como fallback). Dorso y frente: `image.setDisplaySize(size)` en lugar de los `Graphics`; el `coverIcon` y el emoji siguen encima. Emparejada: `showCardMatchedVisual()` → `setAlpha(0.7)` en la imagen (o el redibujo legacy si es `Graphics`). Si falta una textura, se usa el `Graphics` legacy. Los paneles de `visualRecall` / `sequenceRecall` y `FinalMemoryScene` no cambiaron.
 - **Diferencias ("encontrá el distinto", no dos imágenes):** canvas 800x1000 FIT. Presentaciones `grid` / `memory` / `pattern` (casillas `rectangle` `#f0f0f0`, que son también la capa de feedback: verde `a5d6a7` al acertar, amarillo `fff9c4` al errar) y `scene` (park / ocean / space, con objetos en posiciones fijas y un círculo de toque transparente de `hitSize` 130–140).
+  - **Diferencias requeridas (8D.2D.0A):** rondas normales 1, sorpresa (rondas 5 y 10) 2. Las escenas (`items` fijos) nunca piden más de las que tienen: `Math.min(pedidas, correctas)`. La grilla genera tantas como pide; `findAll` / `memory` / `pattern` no cambiaron. Validado con la escena real en los 22 desafíos × normal/sorpresa: solo cambió `cat-ocean` en sorpresa (2 → 1; antes era un softlock en ~5% de las aventuras). Toda escena tiene al menos 1 correcta, así que no hace falta un guard para 0. Sin cambios de contenido, sonidos, textos ni premios.
   - **Visual (8C.3):** `DIFF_BACKGROUNDS` (`public/assets/backgrounds/differences/`); `preload()` carga solo el fondo de la ronda actual (`getBackgroundConfig()`). `diff-bg.webp` en grid / memory / pattern (profundidad -20, sin interacción; el blanco queda como fallback). En `createSceneLevel`, `addBackgroundImage()` y, si hay fondo, se omite **solo** la decoración emoji de profundidad negativa; posiciones, `hitSize` y objetos no cambian. Sin textura: escena legacy completa (nunca ambas). **Space activado en v1.22.2** con un fondo regenerado sin planetas, lunas ni estrellas grandes, para que no compita con los distractores 🪐 🌙 ⭐ de `cat-space` (se había desactivado en v1.22.0 por eso). Si se regenera, mantener esa restricción.
   - **Regla de fondos de escena:** no pueden tener nada que se confunda con un símbolo de juego (peces, siluetas de peces, pulpos, vehículos, planetas…) ni objetos grandes junto a las posiciones de los objetos. Centro despejado, decoración mínima y en la periferia.
   - **Ocean (8C.5G):** fondo nuevo, solo agua, arena, rayos de luz, burbujas y algas chicas en los costados (sin peces, coral ni rocas). Entregado en 1536x1024 (3:2): se usó el **recorte central 4:5** (819x1024) escalado a 1122x1402, q82 (`magick src -gravity center -crop 819x1024+0+0 +repage -filter Lanczos -resize 1122x1402! -strip -quality 82 -define webp:method=6 out.webp`, ~50 KB; el mismo q82 reproduce byte a byte `diff-scene-park.webp`). Source: `assets-src/differences/diff-scene-ocean.source.png`. Los fondos se dibujan con `setDisplaySize(800,1000)`: un asset que no sea 4:5 se deforma. Contraste medido (ΔE de borde): 🐟 en el agua 22–39 (el más débil, legible por contorno y ojo), 🐡 sobre la arena ~27 (igual que el fondo anterior); 🚗 (la respuesta) 60–78 en todas las posiciones.
@@ -65,8 +68,9 @@ No productivos (no tocar sin pedido): `scratch_*.js` y los PNG de referencia en 
 - `session`: estado en memoria (no persistido): `recordActivity`, `recentActivities`, `visitedActivities`, `flavor`, `contextualDiscovery`, `pendingHomeReaction`.
 - `state`: `currentView`, `previousView`, `transitioning` (bloquea `goTo` durante la transición de 250 ms).
 - `navigation`: `registerView`, `goTo(name, options)`, `goHome()`. Al volver a `menu` registra la actividad de la vista que se abandona.
-- `audio`: usa el `AudioContext` creado en `script.js` (`audio.init(audioCtx)`). `tap`, `success`, `softError`, `speak` (`speechSynthesis`, `es-AR`). **No crear otro `AudioContext`.**
-- `progress`: `localStorage['juegosSofi_progress']` = `{version, stars, stickers[], events[]}`. `recordEvent(id)` es idempotente y otorga una estrella solo la primera vez; `unlockSticker(id)`; `showRewardFeedback(emoji, text, assetSrc)`; `stickersConfig`.
+- `audio`: usa el `AudioContext` creado en `script.js` (`audio.init(audioCtx)`). `tap`, `success`, `softError`, `speak` (`speechSynthesis`, `es-AR`), `cue(0..3)` (8D.2C). **No crear otro `AudioContext`.**
+- `rewards` (8D.2C): `isBusy()` / `whenIdle(cb)` sobre la cola de cards (ver Celebration Core).
+- `progress`: `localStorage['juegosSofi_progress']` = `{version, stars, stickers[], events[]}`. `recordEvent(id)` es idempotente y otorga una estrella solo la primera vez; `unlockSticker(id)`; `showRewardFeedback(emoji, text, assetSrc)` (wrapper de compatibilidad sobre la cola); `stickersConfig`, `mainStickers`, `completionSticker`. Reglas y cola: ver Mis Cosas 2.0.
 - `world`: guía, burbujas, reactions, ambient, discoveries, `setGuideState` / `resetGuideState`, `onHomeEnter` / `onHomeExit`.
 
 Otras claves de localStorage: `juegosSofi_game1_adventure_v1`, `juegos-sofi-paint-<drawingId>`, `juegosSofi_gatito`, `juegosSofi_paint_regions_v2` (marca de una sola vez: en v1.21.3 se borró el progreso viejo de bitsy y sparks). **No cambiar esquemas.**
@@ -79,6 +83,28 @@ Otras claves de localStorage: `juegosSofi_game1_adventure_v1`, `juegos-sofi-pain
 - Todos los timers se limpian en `onHomeExit` (`stopAmbient`, `stopHomeDiscoveries`, `hideBubble`, `resetGuideState`).
 - **NO reconstruir el Home durante tareas visuales pequeñas.** Preservar: scroll vertical mobile natural, dimensiones de cards, navegación, touch targets, sin overflow horizontal, sin scroll interno en `.menu-grid`, sin `overflow-y` bloqueado globalmente.
 - `.game-card` (Home), `.drawing-card` / `.selection-card` (Pintar), `.cat-choice-card` (Gatito) son componentes distintos: no compartir geometría.
+
+## Mis Cosas 2.0 (8D.1)
+
+- **Arquitectura:** `collection.js` (después de `script.js`). `buildCollectionModel()` **deriva** todo de `SofiApp.progress.state` (`events`, `stickers`, `stars`): no guarda nada propio y **no lee `catState`**. `renderCollection()` pinta `#collection-games` (5 `.collection-game`, `<button>` con `data-collection-game` y `aria-label` "N de M") y `#collection-special` (Arcoíris), y agrega `.is-collection-complete` al completar todo.
+- **Refresh:** `refreshHomeProgress()` (script.js) actualiza solo `#global-stars-text`. `refreshProgressUI()` es el wrapper que llama el progreso: `refreshHomeProgress()` + `renderCollection()` **solo si** `currentView === 'collection'`. La vista re-renderiza en `onEnter` (0 renders con la vista oculta).
+- **Interacción:** un listener delegado `click` en `#collection-main` (salto con `playCollectionAnimation`, que saca la clase en `animationend`, + `showCollectionSparkles`) y un `error` en captura que reemplaza un `.collection-sticker__image` roto por su emoji. No agregar listeners por render (20 ciclos: 0 netos).
+- **Progreso finito por juego** (un casillero por evento exacto): Diferencias 10 (`differences-level-1..10`), Pintar 3 (`painting-bitsy|buddy|sparks`, miniaturas de `/images/`), Laberinto 6 (`maze-level-1..6` = forest, garden, beach, snow, night, magic), Gatito 3 (`cat-milestone-5|10|15`), Memoria 5 (`memory-level-1..5`).
+- **Stickers activos:** `detective`, `artista`, `exploradora`, `amiga`, `memoriosa` (`mainStickers`) + `arcoiris` (`completionSticker`, card especial). **`flor` está inactivo:** queda en `stickersConfig` por compatibilidad, pero no se muestra ni se otorga.
+- **Reglas (app-core):**
+  - Memoriosa: `unlockSticker('memoriosa')` al final de la aventura de Memoria (`game5.js`, después de `recordEvent('memory-level-5')`).
+  - Arcoíris: `checkCollectionCompletion()` después de cada `unlockSticker` no especial; se otorga al tener los 5 principales. No da estrella ni evento extra.
+  - **Reconciliación silenciosa** (`reconcileProgressRewards()` en `init()`, después de `load()`): `memory-level-5` sin memoriosa → la agrega; los 5 principales sin arcoiris → lo agrega. Idempotente, nunca revoca, sin cards ni estrellas, `save()` solo si cambió. El esquema sigue siendo `{version, stars, stickers[], events[]}`.
+- **Cola de feedback (8D.1F):** `awardStar` y `unlockSticker` encolan (`enqueueRewardFeedback`); el batch de un mismo stack síncrono se cierra con `setTimeout 0`. `_buildRewardSequence`: sticker + estrella = **una** card combinada; Arcoíris va después, en su propia card. Máximo 2 cards por acción y **1 visible a la vez** (1500 ms + 400 ms de fade; clases `.reward-overlay`, `--visible`, `--sticker`, `--special`; `pointer-events: none`). Cards con `role="status"` / `aria-live="polite"` y fallback a emoji si falla la imagen. Caso crítico (terminar Memoria con los otros 4): 2 cards. Rejugar: 0 cards. Salir durante una card no deja huérfanos. Desde 8D.2C el sonido de cada card lo decide `SofiApp.celebration` y la card ya no cambia el estado del guía.
+- **Assets:** `public/assets/icons/stickers/sticker-{detective,artista,memoriosa}.webp` (256, sin pérdida, 61–75 KB) y `public/assets/backgrounds/collection/collection-bg-tile.webp` (512, q85, 17 KB, `256px repeat` sobre `--color-surface`). Exploradora, amiga y arcoiris usan `icon-paw`, `icon-heart` e `icon-rainbow`. Sources en `assets-src/collection/`.
+- **Layout:** `#collection-container > main.collection-main` usa `safe center` (fallback `flex-start`), como Pintar. Grilla de 1 columna, 2 desde 700 px; tokens de Diferencias y Memoria en grilla de 5, Laberinto y Pintar en grilla de 3. Landscape bajo: 2 columnas, header `min-height: 46px` (para que 🏠 no tape la primera card). Respeta `prefers-reduced-motion`.
+
+Baseline 8D.1G (2026-09-30, CSS px):
+
+| | 390x844 | 430x932 | 844x390 | 768x1024 | 1366x768 |
+|---|---|---|---|---|---|
+| Columnas / alto de card | 1 / 140 | 1 / 140 | 2 / 112 | 2 / 140 | 2 / 140 |
+| Card de reward (sticker / especial) | 278x269 / 285x277 | igual | 203x194 / 211x202 (img 88) | igual | igual |
 
 ## Responsive Invariants (8C.5)
 
@@ -188,7 +214,7 @@ Usos de ❤️ / 🌸 / 🐾 en `game4.js` (estado actual, **no reemplazar sin p
 - Assets: `public/assets/characters/sofi-guide/guide-{normal,happy,surprised,thinking,celebrate}.webp`, mapeados en `SOFI_GUIDE_ASSETS` y precargados al cargar el script.
 - DOM: `#home-guide-character` > `#home-guide-image`; burbuja `#home-guide-bubble`.
 - `SofiApp.world.setGuideState(state, {duration, priorityCheck, force})`, con prioridad `normal < thinking < happy < surprised < celebrate`; `resetGuideState()` limpia `guideStateTimer` y vuelve a `normal`.
-- Usos: tap en el guía → `happy` + voz + partícula ❤️; discovery interactivo → `surprised`; star / sticker → `celebrate` (también desde `showRewardFeedback`); completed / primera visita / cierre de sesión → `happy`.
+- Usos: tap en el guía → `happy` + voz + partícula ❤️; discovery interactivo → `surprised`; star / sticker / collection → `celebrate` (solo desde la reacción en el Home; las cards ya no lo tocan); completed / primera visita / cierre de sesión → `happy`.
 - **Los PNG del guía ya incluyen flores rosas (oreja y collar). No superponer `icon-flower.webp` sobre el personaje.**
 
 ## Caramelo
@@ -223,9 +249,9 @@ Integración actual verificada:
 |---|---|
 | `icon-star` | Contadores del Home y de Mis Cosas (`.stars-pill__icon-image`), overlay de `awardStar` (`showRewardFeedback`), decoración de las cards Memoria y Mis Cosas |
 | `icon-heart` | Sticker `amiga`, decoración de la card Mi Gatito, memoria "Mimos" en el álbum del Gatito, decor de la card NARANJA en la pantalla de adopción (8B.2B) |
-| `icon-flower` | Sticker `flor`, decoración de la card Pintar |
+| `icon-flower` | Sticker `flor` (inactivo desde 8D.1), decoración de la card Pintar |
 | `icon-paw` | Sticker `exploradora`, decoración de la card Laberinto |
-| `icon-rainbow` | Sticker `arcoiris`, decoración de la card Pintar, decor de la card BLANCO de adopción (8B.2C) |
+| `icon-rainbow` | Sticker `arcoiris` (card especial de Mis Cosas), decoración de la card Pintar, decor de la card BLANCO de adopción (8B.2C) |
 | `icon-sparkle` | Decoración de las cards Diferencias y Mis Cosas, decor de la card NEGRO de adopción (8B.2C), acento fijo del avatar del guía en el Home (`.home-guide-avatar::after`, 8B.2C) |
 
 ## Shared Asset Policy
@@ -240,8 +266,217 @@ Integración actual verificada:
 - **`icon-sparkle.webp` (8B.2C):** solo para acentos persistentes/protagonistas. **Los sparkles efímeros siguen siendo ligeros:** partículas ✨ (`showParticles`, `showTemporaryParticle`, `createMatchSparkles`), ambient/discoveries del Home, reacciones del guía y los sparkles Phaser de Pintar (`createSparkle` / `showHintSparkle` con `this.add.star`) NO se migran a PNG.
 - **`icon-heart.webp`:** para vínculo, cariño, mascotas, collection y UI persistente. Los corazones como partículas, feedback, texto o animaciones efímeras quedan como emoji.
 
+## Celebration Core (8D.2C)
+
+**Modelo final (8D.2, cerrado en 8D.2F):** un momento = un sonido principal + como mucho una frase. Las cards de premio confirman en silencio y el guía reconoce después, en el Home.
+
+| Juego | L0 (local) | L1 progreso (`cue1` ~0.55 s) | L2 logro (`cue2` ~0.8 s) |
+|---|---|---|---|
+| Memoria | pareja / respuesta correcta (`cue0`) | nivel 1-4 ("¡Muy bien!"; en el 3, "¡Ya vamos por la mitad!") | aventura ("¡Qué buena memoria, Sofi!") |
+| Diferencias | acierto (synth propio, verde, ⭐) | ronda 1-9 (frase = texto del cartel) | aventura ("¡Terminaste la aventura, Sofi!") |
+| Laberinto | objetivo (`success()`, frase propia, Caramelo) | mundo 1-5 ("¡Llegamos a casa!") | aventura ("¡Lo logramos, Sofi!") |
+| Mi Gatito | cuidados y caricias | hitos 5, 10, 20… (sin frase) | hito 15 ("¡Qué buena amiga sos!") |
+| Pintar | región (relleno + chispa) | — | dibujo terminado ("¡Qué lindo te quedó!") |
+
+- **L3** (`cue3` ~1.4 s): Arcoíris, con cualquier juego que dé el 5.º sticker: card + "¡Juntaste todo!" + Mis Cosas completo + guía 🌈.
+- **Repetir:** las aventuras y los dibujos repiten su L2 sin premio (0 estrellas, 0 cards). El Gatito después de 15 queda en L0: un hito ya ganado no celebra.
+- **APIs:** `SofiApp.celebration` (prioridad, sin cola), `SofiApp.voice` (es-AR, 0.9 / 1.1, una frase, sin backlog; la key permite grabaciones a futuro), `SofiApp.motion.reduced` (en vivo) y `SofiApp.rewards` (`isBusy` / `whenIdle`). Nada de esto se persiste.
+
+`public/celebration.js` coordina, jerarquiza y temporiza las celebraciones que ya existen. No otorga premios, no dibuja y no guarda nada (estado solo en memoria). **Migrados los 5 juegos:** Memoria (8D.2D.1), Diferencias (8D.2D.2), Laberinto (8D.2D.3), Mi Gatito (8D.2D.4) y Pintar (8D.2D.5).
+- **Niveles:** 0 micro (local, no pasa por el coordinador), 1 progreso, 2 logro, 3 colección completa.
+- **`SofiApp.celebration.play({ level, event, source })`** → `{ text, level, event, source }` o `null`. Una celebración global a la vez: mientras está activa (L1 1.5 s, L2 3 s, L3 4 s), un pedido de nivel igual o menor se ignora y uno mayor la reemplaza. Suena `audio.cue(level)` y, si `event` tiene copy, una frase. `cancel()` y `currentLevel()`. Sin cola propia.
+- **Integración (8D.2D):** llamar a `play()` en el mismo bloque síncrono que `recordEvent` / `unlockSticker`. Si no, la card (que aparece en el flush con `setTimeout 0`) suena antes.
+- **`SofiApp.voice.say(key, { level })`** → frase o `null`; `voice.cancel()`. es-AR, rate 0.9, pitch 1.1, voseo, "Sofi". Una frase a la vez y sin backlog: una de nivel igual o mayor corta la anterior y una menor se ignora mientras la anterior suena. El copy está en `CELEBRATION_COPY` (10 keys). A futuro la key puede resolver primero a una grabación.
+- **`SofiApp.audio.cue(level)`:** 0 blip suave (~0.2 s), 1 = `success()` (C-E-G ~0.6 s), 2 C-E-G-C' con sine + triangle (~0.8 s), 3 arpegio + acorde sostenido con destellos (~1.4 s). Todo sintetizado. Jerarquía por duración y notas, no por volumen (8D.2E): ver Polish.
+- **`SofiApp.motion.reduced`:** lectura en vivo de `prefers-reduced-motion` (false sin `matchMedia`).
+- **`SofiApp.rewards.isBusy()` / `whenIdle(cb)`** (app-core): busy = batch, flush pendiente, cola o card activa. `whenIdle` llama una vez (en el próximo tick si ya está libre) y devuelve unsubscribe. Lo avisa `_showNextReward` al vaciarse. No cambia la cola.
+- **Cards:** llaman a `play({ level: estrella 1 | sticker 2 | Arcoíris 3, source: 'rewards' })` en vez de `success()`. Una card de nivel igual o menor que la celebración activa no suena (dentro de un L2 la card de sticker queda en silencio y Arcoíris lo reemplaza con cue 3). **Las cards no hablan, salvo Arcoíris cuando reemplaza el L2 del juego** que dio el 5.º sticker ("¡Juntaste todo!"). Las de estrella y sticker pasan `event: null` (su texto ya se ve y la frase del momento es la del juego). Después de navegar (carryover) ninguna habla. El switch `REWARD_CARD_VOICE` (siempre `false`) se sacó en 8D.2E: con los 5 juegos migrados no tenía efecto.
+- **Memoria (8D.2D.1):**
+  - L0 (pareja, respuesta correcta en `visualRecall` / `sequenceRecall`): `cue(0)`.
+  - Niveles 1-4: `play(L1, memory.levelComplete)`; en el 3, `memory.halfway`. Una sola frase. Las 15 estrellas siguen locales.
+  - Después de `recordEvent`, el nivel siguiente espera a `rewards.whenIdle` (`restartWhenRewardsIdle`). Sin card (rejugar) sigue enseguida. Se desuscribe en `shutdown` / `destroy`, y además chequea `scene.isActive()`.
+  - Nivel 5: sin L1. `recordEvent` → `unlockSticker('memoriosa')` → `play(L2, memory.adventureComplete)` en el mismo bloque → `FinalMemoryScene`.
+  - La escena final ya no habla ni llama `success()`: solo un estallido único de 12 estrellas (~1 s).
+  - Movimiento reducido: el nivel muestra una estrella fija que aparece y se va, y el final no tiene estallido.
+- **Diferencias (8D.2D.2):**
+  - L0 sigue siendo local: el synth propio `tap` / `success`, el verde y el ⭐×8.
+  - Rondas 1-9:
+    - `play(L1, differences.roundComplete)` y el cartel muestra **el mismo texto** que devuelve `play()`. Dura ~1.6 s, un poco más que la ventana del L1, así la card de estrella suena siempre como un segundo tiempo.
+    - Ya no suena `levelComplete` ni el sonido del hito. Los hitos ⭐ 🌈 🎁 siguen, solo visuales, ~2 s.
+    - La ronda siguiente espera `rewards.whenIdle` (`restartWhenRewardsIdle`, igual que Memoria).
+  - Ronda 10: cartel en silencio. Después `recordEvent` → `unlockSticker('detective')` → `play(L2, differences.adventureComplete)` en el mismo bloque → `FinalCelebrationScene1`.
+  - La escena final ya no habla ni cancela la voz (cortaba el L2). Con movimiento reducido es fija: sin saltitos ni lluvia. Los carteles de ronda e hito aparecen solo por opacidad.
+  - `advanceLevel` ya no llama `speechSynthesis.cancel()`, porque cortaba la frase del L1.
+  - Los sonidos `levelComplete`, `milestone` y `final` de `playDifferenceSound` se sacaron en 8D.2E (sin llamadas). Quedan `tap`, `success` y `error`.
+- **Laberinto (8D.2D.3):**
+  - Los objetivos siguen siendo L0 local: `playSuccessSound` + `speakMaze` + Caramelo `happy` / `found-bone`.
+  - Mundos 1-5:
+    - Al llegar a casa, Caramelo `celebrate` (local) + `play(L1, maze.worldComplete)`, en lugar de `playSuccessSound` + `speakMaze("¡Llegamos a casa!")`.
+    - A los 2 s, `recordEvent`; la card de estrella entra fuera de la ventana del L1 y suena como un segundo tiempo.
+    - La intro del mundo siguiente espera `rewards.whenIdle` (`restartWhenRewardsIdle`). Usa `this.sys.events` porque `init()` pisa `this.events`.
+  - Mundo 6: llegada en silencio. Después `recordEvent` → `unlockSticker('exploradora')` → `play(L2, maze.adventureComplete)` en el mismo bloque → `FinalCelebrationScene`, que ya no habla.
+  - Movimiento reducido:
+    - La llegada no tiene saltitos, pulso de 🏠 ni ✨ (Caramelo sigue en `celebrate`).
+    - El final queda fijo: sin rebote ni lluvia.
+    - Caminar y jugar no cambia.
+  - El `setTimeout` de 2.5 s de `introSpeech` chequea que la escena siga activa. Hoy ninguna misión define `introSpeech`.
+  - El salto de la intro (8C.5F) sigue igual, también después de la espera por la card.
+- **Mi Gatito (8D.2D.4):** solo cambió `recordCatCareAction()`.
+  - Los cuidados, las caricias, los recuerdos, los favoritos y las reacciones siguen siendo L0 local, con sus sonidos propios.
+  - Con un hito **nuevo** (`recordEvent` devuelve `true`), en el mismo bloque que los premios:
+    - 15: `play(L2, cat.friendship)` → `cue2` + "¡Qué buena amiga sos!". La card de Amiga + ⭐ queda en silencio y Arcoíris, si llega, la reemplaza.
+    - 5 y 10: `play(L1)` sin `event`, solo `cue1`. Nunca tuvieron texto ni voz, así que no se inventó copy. Desde 8D.3E no hay hitos después de 15 (ver Small Progress UX).
+  - Un hito ya ganado, una recarga o los cuidados después de 15 no celebran: solo L0.
+  - Sin escena final ni bloqueo de input. Como no hay visual propio de hito, el movimiento reducido no aplica.
+- **Pintar (8D.2D.5):** solo cambió `game2.js` (`checkCompletion` y `FinalCelebrationScene2`).
+  - Pintar una región sigue siendo L0 local: relleno + chispa, sin sonido (sus `playTone` nunca sonaron) y sin pasar por el coordinador.
+  - Dibujo terminado: `play(L2, painting.drawingComplete)` → `cue2` + "¡Qué lindo te quedó!", en el mismo bloque, después de `recordEvent` → `unlockSticker('artista')` (orden y reglas sin cambios).
+    - También al repetir un dibujo ya ganado: L2 sin premio (0 estrellas, 0 cards).
+    - La card de Artista + ⭐ o la de solo ⭐ quedan en silencio dentro del L2. Si Artista es el 5.º sticker, Arcoíris lo reemplaza a ~1.9 s con `cue3` + "¡Juntaste todo!".
+  - `FinalCelebrationScene2` sigue entrando a los 500 ms (timer de Phaser). Ahora chequea `isShutDown` / `scene.isActive()`: si Sofi se va antes, no arranca (medido: 0 `create`).
+  - La escena ya no habla: se sacó el TTS es-ES "¡Qué hermoso dibujo Sofía! ¡Felicidades!" y sus `playTone` muertos.
+  - Movimiento reducido: sin la lluvia de 30 emojis; la escena entra con `cameras.main.fadeIn(400)`. El botón sigue igual.
+  - El botón "Volver a Jugar" (va al Home) funciona con click real en 390, 844x390 (scrolleado) y 1366. Sin cambios de `pointer-events`.
+  - SVG, `elementFromPoint`, `style.fill`, zoom (1–3, paso 0.5), pan, toolbar, Original, Libre/Guía y la geometría no cambiaron.
+- **Guía:** las cards ya no tocan su estado. Arcoíris notifica `type: 'collection'` (prioridad 4) → "¡Juntaste todo! 🌈". Al entrar al Home, si la cola está ocupada, la reacción espera `whenIdle` y solo se muestra si seguimos en el Home. Si Sofi se va antes, queda pendiente (sin duplicar suscripciones).
+- **Navegación:** `goTo()` llama `celebration.cancel()` + `voice.cancel()` antes de `onExit`. Corta toda voz en curso, también la de los juegos, pero no la que un juego programa después con timers (el `setTimeout` de 2.5 s del Laberinto). La cola de cards sigue: las que quedan suenan sin voz (carryover).
+- **Polish (8D.2E):**
+  - **Jerarquía de cues** (medida con `OfflineAudioContext`):
+
+    | Cue | Notas | Duración | Pico | RMS |
+    |---|---|---|---|---|
+    | 0 | 2 | 0.18 s | 0.05 | 0.017 |
+    | 1 | 3 | 0.55 s | 0.113 | 0.036 |
+    | 2 | 8 | 0.81 s | 0.147 | 0.043 |
+    | 3 | 13 | 1.40 s | 0.155 | 0.029 |
+
+    El cue 3 tenía un pico de 0.227 por el ataque del acorde: el acorde sostenido bajó a sine 0.035 + triangle 0.02, con las mismas notas, duración y armónicos.
+  - **Matriz medida en los 5 juegos** (antes y después, idéntica): un cue principal y como mucho una frase por momento.
+    - L1 + card de estrella = dos tiempos (la card suena después de la ventana). En el Gatito, la card cae dentro de la ventana y queda en silencio.
+    - L2 + card de sticker o estrella = la card en silencio.
+    - Arcoíris = `cue3` + "¡Juntaste todo!" a ~1.9 s, probado desde Memoria y Gatito.
+    - La consigna siguiente siempre entra después de la card.
+  - **Card de Arcoíris:** halo dorado estático (`box-shadow`); no cambia el tamaño (285x277 / 211x202).
+  - **Mis Cosas completo:** `#collection-container.is-collection-complete` agrega un anillo dorado `inset` en la card de Arcoíris y un halo en su sticker. Sin animación ni cambio de box.
+  - **Insignia ⭐ de la card combinada:** sin cambios. Contraste medido en el borde de la estrella sobre los 5 stickers: ΔE mediana ~80, p10 ≥ 33, ≤ 1% de píxeles débiles.
+  - **Movimiento reducido:** L0 sigue animado.
+    - Memoria L1: 1 estrella fija.
+    - Finales de Memoria, Diferencias, Laberinto y Pintar: 0 tweens y 0 loops (Pintar: fade de cámara).
+    - Llegada del Laberinto: sin tweens de festejo.
+    - Gatito: sin visual de hito.
+    - Cards: solo opacidad (`@media` en `styles.css`).
+    - Mis Cosas: sin animaciones.
+  - **F8, lado celebración: resuelto en los 5 juegos.** La navegación corta la frase en L1, L2 y L3, las cards siguen sin voz y el guía espera. Las consignas de cada juego no se auditaron todas.
+- **Ventana vencida:** las ventanas pueden durar más que la card (L2 3 s vs card 1.9 s). Una card nueva de nivel ≤ dentro de ese resto no suena. Solo pasa con premios seguidos a menos de ~1 s.
+
+## Progress & Rewards (8D.3) — modelo final
+
+Cerrado en 8D.3F (2026-10-02). Esquema sin cambios: `{version, stars, stickers[], events[]}`.
+- **Fuente de verdad:** `events[]`. Una estrella por evento nuevo (`recordEvent` idempotente; rejugar no suma). Los stickers son el gran logro de cada juego; Arcoíris sale de los 5 principales. Mis Cosas deriva todo de ese estado.
+- **Guardado inmediato (Memoria, Laberinto, Diferencias):** en el momento lógico del éxito: hold → `recordEvent` → (último nivel) `unlockSticker` → Arcoíris. El feedback (cards, cues, siguiente nivel, final) sale cuando antes, al soltar el hold. Salir, navegar o recargar después del éxito ya no pierde nada. Un juego nuevo con premio diferido debe seguir este patrón (ver Progress Commit).
+- **Gatito:** premios finitos en 5, 10 y 15 (Amiga a los 15); el cuidado sigue para siempre sin premios nuevos. Lo ya guardado de 20+ no se toca.
+- **Pintar:** guarda al completar el dibujo (`painting-<id>`, sin hold: no había ventana demorada); el selector marca con ⭐ solo los dibujos con evento.
+- **Fuera de alcance de 8D.3 (decisión, no deuda):** sin resume de partidas, monedas, XP, rachas, tienda, porcentajes ni pantallas nuevas.
+
+## Small Progress UX (8D.3E)
+
+- **Mi Gatito:** los hitos con premio son solo 5, 10 y 15. En `recordCatCareAction()` la condición pasó a `totalActions % 5 === 0 && totalActions <= 15`.
+  - `totalActions` sigue contando para siempre y los cuidados, caricias, recuerdos y stats no cambian. No hay ningún "terminado".
+  - Después de 15 (20, 25, 30…) no se crea `cat-milestone-N`: sin ⭐, sin card y sin L1.
+  - Los `cat-milestone-20+` ya guardados y sus estrellas quedan como están (sin migración).
+  - Mis Cosas sigue mostrando 3 casilleros.
+- **Selector de Pintar** (`script.js`, `drawing-selector.onEnter`: ahí se arman las cards, no en `game2.js`):
+  - Un dibujo terminado lleva `icon-star.webp` de 34 px en la esquina (`.drawing-card__done`, estilo inline, `pointer-events: none`).
+  - El `aria-label` dice "Pintar X, ya lo terminaste".
+  - Sale **solo** de `events.includes('painting-<id>')`: un dibujo a medias (regiones guardadas sin evento), Artista o las estrellas no lo marcan. Sin estado parcial ni storage nuevo.
+  - Medido en las 5 resoluciones: dentro de la card, sin tapar el dibujo, el título ni el 🏠, y sin overflow.
+  - Tocar la ⭐ abre ese dibujo.
+
+## Progress Commit (8D.3C)
+
+Infraestructura para guardar el progreso en el momento del éxito sin cambiar cuándo aparece su feedback. La API está en `app-core.js`; la usan Memoria, Laberinto y Diferencias (8D.3D).
+- **API (`SofiApp.progress`):**
+  - `holdRewardFeedback()` → handle opaco.
+  - `releaseRewardFeedback(handle)` → `true` si estaba activo. Soltarlo dos veces o soltar un handle desconocido da `false` y no toca los demás holds.
+  - `releaseAllRewardFeedback()` → cuántos soltó; red de seguridad de la navegación.
+- **Qué hace el hold:** controla cuándo se muestra el feedback, nunca cuándo se guarda.
+  - `recordEvent` / `unlockSticker` (y Arcoíris) persisten en el momento.
+  - Sus items quedan en el lote de siempre (`_rewardFeedback.batch`): sin card ni cue hasta que se suelta el **último** hold.
+  - Ahí se programa el mismo flush `setTimeout 0` (`_scheduleRewardFlush`, único lugar que lo programa). El merge (estrella + sticker, después Arcoíris) y los tiempos son los de siempre: medido, liberar → card igual que encolar → card sin hold (±2 ms).
+  - Si el flush ya estaba programado cuando se toma un hold, el lote igual espera.
+- **Ocupado:** el lote retenido cuenta como ocupado. `isBusy()` da true y `whenIdle` no se llama hasta que se suelta, se muestran las cards y la cola se vacía, una sola vez. Un hold vacío no cuenta como ocupado. El guía espera solo (reacciona en `onHomeEnter` con la cola libre).
+- **Seguridad:** cada hold se suelta solo a los `REWARD_HOLD_SAFETY_MS` (6000 ms; el mayor retraso visual actual es ~3.6 s). Soltarlo a mano cancela ese timer.
+- **Navegación:** `goTo()` llama `releaseAllRewardFeedback()` después de `celebration.cancel()` / `voice.cancel()`. Como la cola está ocupada, las cards siguen en la vista nueva sin voz (carryover) y el guía reacciona después.
+- **Solo runtime:** los holds y timers viven en `_rewardHolds` (Map). No se guardan, y el esquema sigue siendo `{version, stars, stickers, events}`.
+  - Recargar con un lote retenido conserva el progreso y no repite la card.
+- **Consecuencia aceptada:** mientras hay un hold, Mis Cosas y los contadores ⭐ ya muestran lo ganado antes de la card. La card es feedback, no la fuente de verdad.
+- Sin hold, el comportamiento es idéntico a 8D.2F.
+- **Memoria (8D.3D.1):**
+  - Al principio de `completeLevel()` (los 3 tipos de ronda terminan ahí): hold → `recordEvent('memory-level-N')` → en el 5, `unlockSticker('memoriosa')` (→ Arcoíris si es el 5.º).
+  - El `delayedCall` de 2 s ya no guarda: solo hace `releaseProgressRewardHold()` y sigue como antes (siguiente nivel con `restartWhenRewardsIdle`, o `play(L2)` + `FinalMemoryScene` en el mismo bloque).
+  - El hold vive en la escena (`progressRewardHold`) y se suelta también en `shutdown` / `destroy`.
+  - Medido: el flujo normal es idéntico a 8D.2F (card de estrella ~2.0 s con su `cue1`, siguiente nivel ~3.9 s, `cue2` + frase y la card de Memoriosa en silencio ~2.0 s, Arcoíris ~3.9 s).
+  - Salir al Home o a Mis Cosas 100 ms después del éxito, o recargar, ya no pierde nada (evento, ⭐, Memoriosa, Arcoíris); las cards siguen sin voz en la vista nueva.
+- **Laberinto (8D.3D.2):**
+  - El punto de guardado es la llegada válida a casa: la rama "casa + misión completa" de `checkCellEvents()`, al terminar el movimiento.
+  - Ahí: hold → `recordEvent('maze-level-N')` → en el mundo 6, `unlockSticker('exploradora')` (→ Arcoíris si es el 5.º).
+  - Llegar a casa sin la misión no guarda nada.
+  - El `delayedCall` de 2 s ya no guarda: suelta el hold y sigue como antes (intro siguiente con `restartWhenRewardsIdle`, o `play(L2)` + `FinalCelebrationScene`).
+  - Hold en la escena (`progressRewardHold`), soltado también en `shutdown` / `destroy` (`this.sys.events`).
+  - Medido con el camino real (BFS + toques en las zonas):
+    - L1 + "¡Llegamos a casa!" en la llegada, card de estrella a ~2.0 s y mundo siguiente ~3.9 s.
+    - Final: `cue2` + frase y Exploradora en silencio a ~2.0 s.
+    - El salto de la intro (8C.5F) sigue sincronizado.
+  - Salir 100 ms después de la llegada, o recargar, ya no pierde nada (evento, ⭐, Exploradora, Arcoíris). No arrancan ni el mundo siguiente ni el final.
+- **Diferencias (8D.3D.3):**
+  - El punto de guardado es la última diferencia pedida: `foundCount === numDifferent` en `handleAnswer()`.
+  - Ahí: hold → `recordEvent('differences-level-N')` → en la ronda final (`currentDiffLevel === currentAdventure.length - 1`), `unlockSticker('detective')` (→ Arcoíris si es el 5.º).
+  - No guardan nada: 1 de 2, un toque erróneo, un toque repetido (`alreadyFound` / `isLocked`) ni una pista.
+  - `advanceLevel()` ya no guarda: suelta el hold y sigue como antes (después del cartel de ~1.6 s y, en las rondas 3/6/9, del hito de ~2 s).
+  - Hold en la escena (`progressRewardHold`), soltado también en `shutdown` / `destroy`.
+  - Medido con los handlers reales de las cards:
+    - Card de estrella a ~1.65 s (hito: ~3.7 s, sin card durante el hito).
+    - Final: `cue2` + frase y Detective en silencio a ~1.65 s.
+    - `cat-ocean` sigue pidiendo 1.
+    - Grid, memory, pattern y scene guardan igual.
+  - Salir 100 ms después de la última diferencia, o recargar, ya no pierde nada (evento, ⭐, Detective, Arcoíris). No reviven ni la ronda, ni el hito, ni el final.
+
 ## Current Phase
 
+- **8D.3** (Progress & Rewards): **CERRADA** (checkpoint 8D.3F, 2026-10-02). Sin desplegar ni commitear; versión recomendada `v1.26.0`. **Próxima: 8D.4.** Modelo en Progress & Rewards (8D.3).
+  - Validado de punta a punta: contrato del hold (tokens, anidados, seguridad 6 s, release-all, 20 ciclos sin restos), guardado inmediato con salida temprana y final como 5.º sticker en los tres juegos, recarga durante un hold, Gatito 5/10/15 (+ 5.º sticker) y nada en 20/25/30 ni con saves históricos, ⭐ del selector con 7 fixtures y click real, rejugar sin cards, reconciliación de un save viejo, ciclo de vida, matriz de 5 resoluciones y resize de Memoria.
+  - Tiempos medidos con la pestaña oculta salen ~0.05–0.35 s más largos (lag del reloj de Phaser; `delayedCall(2000)` disparó a 2052–2346 ms): es del entorno, el código es el mismo de 8D.3D.
+- **8D.3E** (Small Progress UX): **PASS** (2026-10-02). Gatito con hitos hasta 15 (`game4.js`) y ⭐ en los dibujos terminados del selector de Pintar (`script.js`). Ver Small Progress UX.
+- **8D.3D Game Integration: COMPLETE** (2026-10-02). Memoria, Laberinto y Diferencias guardan en el momento del éxito.
+- **8D.3D.3** (Diferencias, guardado inmediato): **PASS** (2026-10-02). Solo `game1.js`; ver Progress Commit → Diferencias.
+- **8D.3D.2** (Laberinto, guardado inmediato): **PASS** (2026-10-02). Solo `game3.js`.
+- **8D.3D.1** (Memoria, guardado inmediato): **PASS** (2026-10-02). Solo `game5.js`.
+- **8D.3C** (Progress Commit Core): **PASS** (2026-10-02). Hold / release del feedback de premios en `app-core.js` (ver Progress Commit). Ningún juego lo usa todavía. Decisiones de 8D.3B aprobadas:
+  - D1: guardar en el momento del éxito.
+  - D2: estrellas acumulativas y secundarias.
+  - D3: Gatito con premios hasta 15.
+  - D4: ⭐ en los dibujos terminados del selector.
+  - D5: sin resume.
+  - D6: Mis Cosas es la superficie principal.
+  - D7: sticker = gran logro del juego.
+  - 8D.3 sigue abierta.
+- **8D.2** (Celebration System): **CERRADA** (checkpoint 8D.2F, 2026-10-01). **Desplegada en `v1.25.0` (2026-10-02)** junto con 8D.1, sin commitear.
+  - Validado de punta a punta: los 5 juegos (L0 a L3, repeticiones), L3 desde Memoria, Diferencias, Laberinto, Gatito y Pintar, navegación en L1 / L2 / L3, movimiento reducido, la matriz de 5 resoluciones y el ciclo de vida.
+  - Storage sin cambios de esquema; la reconciliación sigue silenciosa.
+  - Regresiones históricas OK: resize de Memoria, cap de `cat-ocean`, intro-hop, `safe center` de Pintar y su botón final con click real.
+  - **Próxima: 8D.3.**
+- **8D.2E** (Celebration polish): **PASS** (2026-10-01). Ver Celebration Core → Polish.
+- **8D.2D.5** (Pintar): **PASS** (2026-10-01). Los 5 juegos usan el Celebration System.
+- **8D.2D.0B** (botón final de Pintar): **BLOCKED — bug no reproducible** (2026-10-01). Sin cambios de código: el botón ya funciona con input real (ver Known Issues).
+- **8D.2D.4** (Mi Gatito): **PASS** (2026-10-01).
+- **8D.2D.3** (Laberinto): **PASS** (2026-10-01).
+- **8D.2D.2** (Diferencias): **PASS** (2026-10-01).
+- **8D.2D.0A** (softlock de `cat-ocean`): **PASS** (2026-10-01).
+- **8D.2D.1** (Memoria): **PASS** (2026-10-01).
+- **8D.2C** (Celebration Core): **PASS** (2026-10-01). Solo infraestructura. Plan completo: 8D.2D.1 Memoria → 8D.2D.0A `cat-ocean` → .2 Diferencias → .3 Laberinto → .4 Gatito → .0B botón de Pintar → .5 Pintar → 8D.2E → 8D.2F.
+- **8D.1** (Mis Cosas 2.0): **CERRADA** (checkpoint 8D.1G, 2026-09-30). Desplegada en `v1.25.0`.
+  - **A/B:** auditoría y diseño. **C:** modelo, render y layout. **D:** assets. **E:** Memoriosa, Arcoíris y reconciliación. **F:** cola de feedback. **G:** checkpoint.
+  - Detalle en Mis Cosas 2.0.
 - **8C.5** (responsive, resize y usabilidad): **cerrada y desplegada en v1.24.0** (checkpoint 2026-09-29).
   - **A:** un solo centrado del canvas.
   - **B.1:** landscape bajo en Diferencias, Laberinto, Mi Gatito y Adopción.
@@ -252,7 +487,6 @@ Integración actual verificada:
   - **G:** fondo de Ocean (F5).
   - **H:** auditoría de F18, aceptada con deuda.
   - Detalle en Responsive Invariants, Diferencias, Maze y Known Issues.
-  - **8D:** no definida; no empezar sin pedido.
 - **8A** (personajes propios): completada. Guía integrado en el Home; Caramelo integrado en el Laberinto.
 - **8B.1** (5 iconos de juegos): completada.
 - **8B.2A** (`icon-star`): completada.
@@ -278,12 +512,13 @@ Integración actual verificada:
 7. Mi Gatito: `catState` / persistencia, decay, memorias, preferencias, iniciativas, `clearCatInitiative`.
 8. Esquemas de localStorage (todas las claves listadas en SofiApp).
 9. Progreso: `recordEvent` idempotente, IDs de eventos y stickers.
+10. Mis Cosas y rewards: modelo derivado (sin esquema propio), reconciliación silenciosa, cola con 1 card visible.
 
 **Política de no regresión:** una tarea visual NO debe alterar gameplay, dificultad, score, progresión, lógica de rewards, esquema de localStorage, BFS / pathfinding, colisiones, movimiento, completitud ni comportamiento de personajes. Si una tarea visual parece requerirlo: **DETENERSE y explicar por qué antes de tocar nada.**
 
 ## Validation
 
-Baseline (2026-09-29): los 8 JS pasan.
+Baseline (2026-10-01): los 10 JS pasan.
 
 ```bash
 for f in public/*.js; do node --check "$f" || echo "FAIL $f"; done
@@ -304,12 +539,30 @@ Trampas conocidas del entorno de prueba (no son bugs de la app):
 - **Esperas:** en Diferencias, Laberinto y Memoria el título del header se fija en `init()` / `create()`, y los assets cargan en tiempo real. Medir el canvas recién después de que la escena esté corriendo, o el tamaño sale del header viejo.
 - **Globales `let`:** `catState`, `game1Instance`, `currentMazeLevel`… no son `window.*`. Leerlas por nombre o con `(0, eval)('catState')`.
 - **Adopción:** para volver a verla, borrar `juegosSofi_gatito` y poner `catState.adopted = false`.
+- **Input de Phaser con `headlessStep`:** el orden `topOnly` usa `camera.renderList`, que solo se actualiza al renderizar. Tras avanzar mucho con `headlessStep`, un toque puede ir a un objeto viejo (por ejemplo, el overlay de un cuidado del Gatito). Renderizar con `game.step()` antes de tocar.
+- **Listeners de Phaser:** cada juego abierto sin un gesto real deja en `body` los listeners de desbloqueo de audio (`touchstart`, `touchend`, `click`, `keydown`; se van con el primer gesto) y +1 `visibilitychange` (ver Deuda aceptada). Mis Cosas no agrega ninguno.
 - **Datos:** el harness debe guardar y restaurar `localStorage`. "Reiniciar" en Pintar borra el progreso del dibujo.
+
+### QA Harness
+
+`tools/qa/harness.js` → `window.SofiQA`: helpers de QA para el browser (storage, viewport, dom, navigation, phaser, painting, listeners, lifecycle, assert, results). Fuera de `public/`: no se despliega (404 en `firebase serve`) y la app no lo carga. Mide y devuelve objetos; no decide. La API está comentada en el archivo.
+- **Inyección:** leer el archivo y pasar su contenido completo a `javascript_tool` (~7k tokens, una vez por sesión). Se guarda solo en `sessionStorage.__SofiQA_src`; después de una recarga: `(0, eval)(sessionStorage.__SofiQA_src)`. `backup`/`restore` ignoran las claves `__SofiQA*`.
+- **Storage, siempre así** (`restore` también repone `SofiApp.progress.state` en memoria; `catState` y demás requieren recargar):
+  ```js
+  const bk = SofiQA.storage.backup();
+  try { SofiQA.storage.setProgress(fixture, { apply: true }); /* … */ } finally { SofiQA.storage.restore(bk); }
+  ```
+- **Presets:** `SofiQA.viewport.standardMatrix()` → mobilePortraitSmall 390x844, mobilePortrait 430x932, mobileLandscape 844x390, tablet 768x1024, desktop 1366x768. El tamaño lo cambia `resize_window`; el harness solo mide (`viewport.matches(name)`).
+- **Estado y ciclos:** `SofiQA.snapshot()` / `lifecycle.snapshot()` (vista, canvas, cards de reward y cola, Mis Cosas, guía, overflow). `await SofiQA.lifecycle.cycles({ view: 'collection', count: 5, countListeners: true })`. Pintar: `painting.open(id)` / `painting.ready()`; `phaser.waitForGameReady('game2')` falla a propósito.
+- **Pestaña oculta** (`SofiQA.environment()`): rAF no corre, así que las animaciones CSS quedan en el frame 0 (usar `navigation.open(view, {}, { settle: true })` antes de medir), el destroy diferido de Phaser no llega (`navigation.home()` lo ejecuta) y el FIT no se recalcula (`waitForGameReady` avanza 1 frame). Para gameplay: `phaser.installTweenClock()` + `stepFrames` / `stepUntil`, con `render: true` antes de tocar. Terminar con `SofiQA.cleanup()`. Con el panel colapsado el viewport mide 0x0 (`zeroViewport`).
+- **Celebraciones (QA.1):** `const m = SofiQA.monitor.start()` … `m.stop()` → `{ events, counts }` con `speak`/`cancel` (speechSynthesis), `voiceSay`/`voiceCancel` (`SofiApp.voice`, si existe), `cue0..3` (`SofiApp.audio.cue`, si existe) y `legacySuccess`; tiempos en ms desde el start. Uno a la vez; `mute: true` silencia. Con el reloj virtual, los tiempos del juego salen comprimidos y los de las cards (setTimeout) son reales.
+- `await SofiQA.rewards.waitIdle({ timeout })` → `{ ok, elapsedMs, via, state }` (usa `SofiApp.rewards.whenIdle` si existe; si no, observa la cola sin tocarla).
+- Fuera del harness: consola y red (herramientas del browser) y borrar `firebase-debug.log` (shell).
 
 ## Versioning / Deploy
 
 Fuente: `.agents/skills/juegos-sofi-versioning/SKILL.md`.
-- La versión está en `public/app-core.js` → `SofiApp.version` (hoy `v1.24.0`); se renderiza sola en el Home.
+- La versión está en `public/app-core.js` → `SofiApp.version` (hoy `v1.25.0`); se renderiza sola en el Home.
 - Formato `vMAJOR.MINOR.PATCH`: MAJOR = cambio de framework o estructura; MINOR = fase nueva o minijuego nuevo; PATCH = bugfix o mejora visual pequeña.
 - Cada deploy a Firebase debe incrementar la versión. Informar al usuario el número nuevo.
 - Deploy: `firebase deploy` (Hosting, proyecto `gaming-eb091`). **Solo cuando el usuario lo pida explícitamente**; es una acción externa.
@@ -338,7 +591,14 @@ No hacer refactors, cambios de gameplay, ediciones a `GEMINI.md` ni deploys sin 
 - Fondos de Mi Gatito: peso resuelto en v1.21.2 (WebP, ~174 KB). Siguen apartándose de la especificación de 8C.1: horizonte en ~58%, suelo naranja en Room (🐈 contrasta poco de día), flores y arbustos en primer plano en Garden y Playground, y una estantería detrás de 🛁.
 - `playTone` se invoca en `game2.js` y `game3.js` (protegido con `typeof playTone === 'function'`), pero no está definido en ningún archivo: esos tonos nunca suenan.
 - **Resuelto en v1.21.3 (Pintar):** la instancia no se destruía al volver al Home; los listeners del transform layer y de los botones Libre/Guía se acumulaban entre sesiones (cada toque se procesaba una vez por escena vieja y pintaba con el color viejo); la celebración quedaba tapada por el dibujo; y bitsy y sparks no se podían completar (4 y 5 regiones tapadas; ahora 30 regiones cada uno). Copia de los archivos previos en `assets-src/code-backup-v1.21.2/`.
-- **Pendiente (Pintar):** el botón "Volver a Jugar" de `FinalCelebrationScene2` no se puede tocar, porque el canvas está dentro de `#painting-phaser-layer` con `pointer-events: none` (a propósito, para que los toques lleguen al SVG). Hoy la celebración solo se cierra con 🏠 Menú. Arreglarlo implica activar `pointer-events` en esa capa solo durante la celebración: requiere aprobación, porque es un área sensible. Los dibujos bitsy y sparks conservan algunas regiones reales muy chicas (30–120 px² en tablet), difíciles de acertar en celular. El `end-screen-2` DOM y `showEndScreen2` (script.js) no se usan.
+- **Botón "Volver a Jugar" de `FinalCelebrationScene2`: funciona (8D.2D.0B, 2026-10-01; antes figuraba como roto).** El canvas sí hereda `pointer-events: none` de `#painting-phaser-layer` (`elementFromPoint` en el botón da `#drawing-area`), pero Phaser 3.60 también escucha `mousedown` / `touchstart` en `window` y hace el hit test por coordenadas, así que el botón recibe el toque igual. Medido con clicks reales en buddy, llegando al final por la completitud normal:
+  - 390x844 y 844x390 (después de scrollear el `main`): 1 toque → `showMenu()` → Home.
+  - 1366x768: un click 13 px debajo del botón no hace nada; doble click → `showMenu` ×2, pero una sola navegación (lo frena `transitioning`).
+  - El hit area es el rectángulo de 250x80 y `canvasBounds` sigue el scroll del `main`.
+  - Sin probar: touch real en un dispositivo; por código usa el mismo camino que el mouse.
+  - No activar `pointer-events` en esa capa: no hace falta.
+  - La acción es ir al Home (`showMenu()`), aunque el texto diga "Volver a Jugar".
+- **Pendiente (Pintar):** los dibujos bitsy y sparks conservan algunas regiones reales muy chicas (30–120 px² en tablet), difíciles de acertar en celular. El `end-screen-2` DOM y `showEndScreen2` (script.js) no se usan.
 - **Resuelto en 8C.4B (asset de Pintar):** el tile entregado era un PNG con extensión `.webp` (1254x1254, 916 KB), no era seamless (un crayón cortado en el borde derecho) y era demasiado denso, con círculos que se confundían con la paleta. Se reemplazó por un tile armado con sus propios motivos (ver Painting → Ambientación).
 - **Resuelto en 8C.4.0 (Pintar, solo CSS):** el contenido que desbordaba hacia arriba y no se podía alcanzar (ver Painting → Layout). Copia del CSS anterior en `assets-src/code-backup-v1.22.2/styles.css`. Desplegado en v1.23.0.
 - **Pendiente (Pintar, detectado en 8C.4.0, no corregido):**
@@ -357,7 +617,8 @@ No hacer refactors, cambios de gameplay, ediciones a `GEMINI.md` ni deploys sin 
 - Memoria: el frente de carta tiene ~5% de margen transparente (el dorso ~1%): al girar se ve un poco más chico. La carta emparejada (alpha 0.7) se distingue poco de una abierta a 34 px.
 - La decoración aleatoria del Laberinto (30% de las celdas libres, profundidad -1) queda debajo del rectángulo opaco de su celda (profundidad 0), así que **nunca se ve**. Si se sube su profundidad, puede tapar los caminos.
 - `.cat-choice-card .card-decor` (hoy solo el emoji ⭐ de GRIS) tiene `pointer-events: auto`, y el listener de adopción lee `e.target.getAttribute('data-cat')`: un toque justo sobre esos decor adopta con `emoji = null` (**verificado en el browser** con ⭐ de GRIS: el gato queda sin representación). NARANJA, NEGRO y BLANCO ya no lo tienen (sus img usan `pointer-events: none`); GRIS sigue afectada.
-- Los stickers `arcoiris` y `flor` están en `stickersConfig`, pero ningún juego llama `unlockSticker` con esos IDs: hoy son imposibles de desbloquear.
+- **Resuelto en 8D.1:** `arcoiris` ahora se obtiene al completar los 5 stickers principales. `flor` sigue sin forma de obtenerse, a propósito (inactivo).
+- **Home en 390x844 (preexistente, LOW):** `.home-guide-bubble` (left 195, ancho 200) termina en 395 px: `scrollX` llega a 5 con `scrollTo`, pero `body.is-home` tiene `overflow-x: hidden` y el usuario no puede scrollear. 8D.1 no lo tocó.
 - Muchos `console.log` de debug en Pintar.
 - CSS legacy posiblemente sin uso (fases 7/8) y abundante estilo inline en `index.html` (Pintar).
 
@@ -381,7 +642,7 @@ F1 doble centrado · F2 Diferencias en landscape bajo · F3 Memoria no recuperab
   - `pointercancel` pinta.
   - Detalle en "Pendiente (Pintar)".
 - **Voz:**
-  - F8: la voz puede seguir después de salir de un juego.
+  - F8: la voz puede seguir después de salir de un juego. **Memoria: resuelto en 8D.2D.1** (la navegación corta la voz; medido: `speaking` / `pending` en false al salir durante el L2). **Diferencias y Laberinto: limpios / resueltos** (8D.2D.2 / 8D.2D.3; el `setTimeout` del Laberinto ahora chequea la escena). **Gatito: limpio** (8D.2D.4; `onExit` y la navegación cortan la voz, y sus demoras son timers de Phaser). **Pintar: resuelto** (8D.2D.5; el final ya no habla y la frase del L2 se corta al salir). Pintar no tiene otro TTS. **Lado celebración resuelto en los 5 juegos (8D.2E).** Las consignas de cada juego (TTS propio) no se auditaron todas.
   - A futuro: un `SofiApp.voice` con audio grabado primero y TTS de fallback (inventario en `docs/voice-audit.csv`, sin trackear).
   - F15: mezcla de "quieres" / "querés" en los textos.
 - **Laberinto:**
@@ -394,6 +655,19 @@ F1 doble centrado · F2 Diferencias en landscape bajo · F3 Memoria no recuperab
   - F10: transparencia en la adopción.
   - F17: objetos decorativos.
   - Además, lo ya listado arriba.
+- **Mis Cosas (8D.1):**
+  - Dos stickers normales en la misma acción no pasa hoy; si pasara, el segundo usa el lugar libre de la cola (máximo 2 cards).
+  - Las cards de reward son DOM sobre cualquier vista: no bloquean toques, pero tapan el canvas unos 2 s.
+  - Las animaciones de Mis Cosas dependen de `animationend`; con la pestaña oculta no terminan (se limpian al volver).
+- **Celebración (revisado en 8D.2E):**
+  - KEEP: Pintar "Volver a Jugar" va al Home (texto vs acción).
+  - KEEP: ventana activa más larga que la card (L2 3 s vs card 1.9 s). En los 5 juegos no produjo nada visible.
+  - Ventana de guardado demorado (salir justo después del éxito perdía el crédito): **FIXED en los tres juegos** (Memoria 8D.3D.1, Laberinto 8D.3D.2, Diferencias 8D.3D.3).
+  - FIXED en 8D.3E: Gatito daba ⭐ sin fin después de 15; el selector de Pintar no mostraba qué dibujos estaban terminados.  - KEEP: F18, celdas chicas del Laberinto en 844x390 (ver Laberinto).
+  - DEFERRED: touch real en un dispositivo (solo click real y eventos sintéticos).
+  - DEFERRED: botones finales chicos en landscape bajo (Pintar 230x74 en 844x390; en 390 portrait 101x32).
+  - DEFERRED: fuga de voz de las consignas de cada juego (fuera del Celebration System).
+  - FIXED: pico del cue 3, `REWARD_CARD_VOICE` muerto, synths muertos de Diferencias, Mis Cosas completo sin estilo.
 - **General:**
   - F14: pedidos repetidos de texturas ya cacheadas.
   - Phaser `VisibilityHandler` deja **+1 listener `visibilitychange`** en `document` por cada juego abierto y cerrado (medido 6 en 6 ciclos).

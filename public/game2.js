@@ -1001,7 +1001,13 @@ class PaintingScene extends Phaser.Scene {
                     SofiApp.progress.unlockSticker('artista');
                 }
             }
+            // 8D.2D.5: el dibujo terminado es un L2 (cue2 + "¡Qué lindo te quedó!"), en el mismo bloque que los
+            // premios para que la card llegue después. También al repetir un dibujo ya ganado (sin premio).
+            if (SofiApp.celebration) {
+                SofiApp.celebration.play({ level: 2, event: 'painting.drawingComplete', source: 'painting' });
+            }
             this.time.delayedCall(500, () => {
+                if (this.isShutDown || !this.scene.isActive()) return;
                 this.scene.start('FinalCelebrationScene2');
             });
         }
@@ -1064,8 +1070,13 @@ class FinalCelebrationScene2 extends Phaser.Scene {
         
         this.cameras.main.setBackgroundColor('#ffeb3b');
         
+        // 8D.2D.5: el sonido y la frase del final los da el L2 que pidió PaintingScene al completar.
+        // Con movimiento reducido, sin la lluvia de emojis: la escena entra con un fade.
+        const reducedMotion = !!(SofiApp.motion && SofiApp.motion.reduced);
+        if (reducedMotion) this.cameras.main.fadeIn(400);
+
         const emojis = ['🎈', '🎉', '🌟', '🏆', '🎊'];
-        for (let i = 0; i < 30; i++) {
+        for (let i = 0; i < (reducedMotion ? 0 : 30); i++) {
             let x = Phaser.Math.Between(0, 800);
             let y = Phaser.Math.Between(-100, 1000);
             let emoji = Phaser.Math.RND.pick(emojis);
@@ -1081,19 +1092,6 @@ class FinalCelebrationScene2 extends Phaser.Scene {
                 duration: Phaser.Math.Between(2000, 4000),
                 ease: 'Cubic.easeOut'
             });
-        }
-        
-        if (typeof playTone === 'function' && audioCtx) {
-            if(audioCtx.state === 'suspended') audioCtx.resume();
-            playTone(500, 'sine', 0.1, audioCtx.currentTime);
-            setTimeout(() => playTone(600, 'sine', 0.1, audioCtx.currentTime + 0.1), 100);
-            setTimeout(() => playTone(800, 'sine', 0.2, audioCtx.currentTime + 0.2), 200);
-        }
-        
-        if (window.speechSynthesis) {
-            const utterance = new SpeechSynthesisUtterance('¡Qué hermoso dibujo Sofía! ¡Felicidades!');
-            utterance.lang = 'es-ES';
-            window.speechSynthesis.speak(utterance);
         }
         
         // Botón volver

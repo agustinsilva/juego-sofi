@@ -246,14 +246,29 @@ function recordCatCareAction() {
     if (SofiApp.progress) {
         catState.totalActions = (catState.totalActions || 0) + 1;
         
-        // Every 5 actions gives a star milestone
-        if (catState.totalActions % 5 === 0) {
-            SofiApp.progress.recordEvent(`cat-milestone-${catState.totalActions}`);
+        // Every 5 actions gives a star milestone, hasta 15 (8D.3E): los hitos con premio son 5, 10 y 15. Después
+        // el gatito sigue igual (totalActions sigue contando y los cuidados no cambian), pero sin hitos nuevos.
+        // Los cat-milestone-20+ que ya estén guardados (y sus estrellas) quedan como están.
+        let isNewMilestone = false;
+        if (catState.totalActions % 5 === 0 && catState.totalActions <= 15) {
+            isNewMilestone = SofiApp.progress.recordEvent(`cat-milestone-${catState.totalActions}`);
         }
-        
+
         // At 15 actions, unlock 'amiga' sticker
         if (catState.totalActions === 15) {
             SofiApp.progress.unlockSticker('amiga');
+        }
+
+        // 8D.2D.4: el hito nuevo es el momento global, en el mismo bloque que los premios (la card queda en
+        // silencio si es del mismo nivel). 15 = L2 de amistad ("¡Qué buena amiga sos!"); los demás hitos = L1
+        // solo con sonido (nunca tuvieron frase). Rehacer un hito ya ganado no celebra: recordEvent devuelve false.
+        // El cuidado en sí sigue siendo feedback local del gatito.
+        if (isNewMilestone && SofiApp.celebration) {
+            if (catState.totalActions === 15) {
+                SofiApp.celebration.play({ level: 2, event: 'cat.friendship', source: 'cat' });
+            } else {
+                SofiApp.celebration.play({ level: 1, event: null, source: 'cat' });
+            }
         }
         saveCatState();
     }

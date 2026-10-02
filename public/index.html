@@ -88,17 +88,17 @@
 
     <!-- MIS COSAS (COLECCIÓN) -->
     <div id="collection-container" class="container container--collection hidden menu-theme">
-        <header>
-            <h1 class="page-title">⭐ Las cosas de Sofi ⭐</h1>
-            <div id="collection-stars-counter" class="stars-pill">
-                <img src="/assets/icons/shared/icon-star.webp" alt="" aria-hidden="true" class="stars-pill__icon-image">
+        <header class="collection-header">
+            <h1 class="collection-title">Mis Cosas</h1>
+            <div id="collection-stars-counter" class="stars-pill collection-stars">
+                <img src="/assets/icons/shared/icon-star.webp" alt="" aria-hidden="true" class="stars-pill__icon-image" width="32" height="32">
                 <span id="collection-stars-text">0</span>
             </div>
         </header>
-        <main>
-            <div id="stickers-grid" class="collection-grid">
-                <!-- Filled dynamically by script.js -->
-            </div>
+        <main id="collection-main" class="collection-main">
+            <!-- Cards generadas por collection.js -->
+            <div id="collection-games" class="collection-games"></div>
+            <div id="collection-special" class="collection-special"></div>
         </main>
     </div>
 
@@ -276,7 +276,9 @@
 
     <script src="drawings.js"></script>
     <script src="app-core.js"></script>
+    <script src="celebration.js"></script>
     <script src="script.js"></script>
+    <script src="collection.js"></script>
     <script src="game1.js"></script>
     <script src="game2.js"></script>
     <script src="game3.js"></script>

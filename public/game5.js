@@ -235,6 +235,16 @@ class MemoryScene extends Phaser.Scene {
 
         this.inputLocked = true;
         this.isLevelCompleting = false;
+        // 8D.3D.1: hold del feedback de premios de este nivel (ver completeLevel). Si la escena se cierra con el hold
+        // activo, se suelta: el progreso ya está guardado y sus cards no pueden quedar retenidas.
+        this.progressRewardHold = null;
+        const onClose = () => {
+            this.events.off('shutdown', onClose);
+            this.events.off('destroy', onClose);
+            this.releaseProgressRewardHold();
+        };
+        this.events.once('shutdown', onClose);
+        this.events.once('destroy', onClose);
 
         // UI Title
         const titleEl = document.getElementById('memory-level-title');
@@ -513,8 +523,8 @@ class MemoryScene extends Phaser.Scene {
             this.hintTweens.forEach(t => t.stop());
             
             this.createMatchSparkles(container.x, container.y);
-            SofiApp.audio.success();
-            
+            SofiApp.audio.cue(0); // 8D.2D.1: acierto = micro (L0), no el sonido de logro
+
             this.time.delayedCall(1200, () => {
                 this.currentRecallIndex++;
                 this.startNextVisualRecall();
@@ -786,7 +796,7 @@ setupSequenceRecallRound() {
         if (sym === expectedSym) {
             // Correct
             this.createMatchSparkles(container.x, container.y);
-            SofiApp.audio.success();
+            SofiApp.audio.cue(0); // 8D.2D.1: L0
             
             this.tweens.add({
                 targets: container,
@@ -1042,7 +1052,7 @@ setupSequenceRecallRound() {
             this.secondCard.isMatched = true;
             this.matchedPairs++;
 
-            SofiApp.audio.success();
+            SofiApp.audio.cue(0); // 8D.2D.1: pareja = micro (L0)
             this.createMatchSparkles(this.firstCard.container.x, this.firstCard.container.y);
             this.createMatchSparkles(this.secondCard.container.x, this.secondCard.container.y);
 
@@ -1191,46 +1201,90 @@ setupSequenceRecallRound() {
         this.isLevelCompleting = true;
         this.clearHint();
 
-        SofiApp.audio.speak('¡Muy bien!');
+        // 8D.3D.1: el nivel ya está ganado: se guarda acá (evento + ⭐; en el 5, también Memoriosa y Arcoíris si es el
+        // 5.º sticker), así salir antes de los 2 s no pierde nada. Las cards quedan retenidas hasta el punto de siempre.
+        if (SofiApp.progress) {
+            if (SofiApp.progress.holdRewardFeedback) this.progressRewardHold = SofiApp.progress.holdRewardFeedback();
+            SofiApp.progress.recordEvent('memory-level-' + currentMemoryLevel);
+            if (currentMemoryLevel === 5) SofiApp.progress.unlockSticker('memoriosa');
+        }
 
-        for (let i = 0; i < 15; i++) {
-            this.time.delayedCall(i * 100, () => {
-                const x = Phaser.Math.Between(50, this.scale.width - 50);
-                const y = Phaser.Math.Between(50, this.scale.height - 50);
-                const star = this.add.star(x, y, 5, 10, 20, 0xffeb3b).setAlpha(0);
-                this.tweens.add({
-                    targets: star,
-                    alpha: 1,
-                    scale: 2,
-                    y: y - 100,
-                    angle: 360,
-                    duration: 1000,
-                    onComplete: () => star.destroy()
-                });
+        // 8D.2D.1: niveles 1-4 = L1 (cue1 + una sola frase; en el 3, la de la mitad).
+        // El nivel 5 queda en silencio: su momento audible es el L2 de la aventura, 2 s después.
+        if (currentMemoryLevel < 5 && SofiApp.celebration) {
+            SofiApp.celebration.play({
+                level: 1,
+                event: currentMemoryLevel === 3 ? 'memory.halfway' : 'memory.levelComplete',
+                source: 'memory'
             });
         }
 
-        
-        
+        if (SofiApp.motion && SofiApp.motion.reduced) {
+            // Sin movimiento: una estrella fija que aparece y se va (solo opacidad)
+            const star = this.add.star(this.scale.width / 2, this.scale.height / 2, 5, 40, 80, 0xffeb3b).setAlpha(0).setDepth(50);
+            this.tweens.add({ targets: star, alpha: 1, duration: 300, hold: 1200, yoyo: true, onComplete: () => star.destroy() });
+        } else {
+            for (let i = 0; i < 15; i++) {
+                this.time.delayedCall(i * 100, () => {
+                    const x = Phaser.Math.Between(50, this.scale.width - 50);
+                    const y = Phaser.Math.Between(50, this.scale.height - 50);
+                    const star = this.add.star(x, y, 5, 10, 20, 0xffeb3b).setAlpha(0);
+                    this.tweens.add({
+                        targets: star,
+                        alpha: 1,
+                        scale: 2,
+                        y: y - 100,
+                        angle: 360,
+                        duration: 1000,
+                        onComplete: () => star.destroy()
+                    });
+                });
+            }
+        }
+
         this.time.delayedCall(2000, () => {
             if (!this.scene.isActive()) return;
-            
-            if (SofiApp.progress && SofiApp.progress.recordEvent) {
-                SofiApp.progress.recordEvent('memory-level-' + currentMemoryLevel);
-            }
-            
+
+            // 8D.3D.1: el punto de siempre de las cards. Los premios ya se guardaron en completeLevel; acá solo se
+            // suelta su feedback (el flush llega en el próximo tick, igual que antes).
+            this.releaseProgressRewardHold();
+
             if (currentMemoryLevel < 5) {
-                if (currentMemoryLevel === 3) {
-                    SofiApp.audio.speak('¡Mitad de la aventura!');
-                }
                 currentMemoryLevel++;
-                this.scene.restart();
+                this.restartWhenRewardsIdle();
             } else {
+                // 8D.2D.1: L2 en el mismo bloque síncrono que el feedback de los premios, así la card de Memoriosa
+                // (que aparece en el flush) queda en silencio y Arcoíris, si llega, la reemplaza con L3.
+                if (SofiApp.celebration) {
+                    SofiApp.celebration.play({ level: 2, event: 'memory.adventureComplete', source: 'memory' });
+                }
                 this.scene.start('FinalMemoryScene');
             }
         });
+    }
 
+    // 8D.3D.1: suelta el hold de este nivel (idempotente; si la navegación ya lo soltó, el core devuelve false).
+    releaseProgressRewardHold() {
+        const hold = this.progressRewardHold;
+        this.progressRewardHold = null;
+        if (hold && SofiApp.progress && SofiApp.progress.releaseRewardFeedback) SofiApp.progress.releaseRewardFeedback(hold);
+    }
 
+    // 8D.2D.1: el siguiente nivel no arranca debajo de la card de estrella (taparía la fase de "mirá bien").
+    // Si no hay card (rejugar), sigue igual que antes. Si la escena se cierra mientras espera, no revive.
+    restartWhenRewardsIdle() {
+        if (!SofiApp.rewards || !SofiApp.rewards.isBusy()) {
+            this.scene.restart();
+            return;
+        }
+        const unsubscribe = SofiApp.rewards.whenIdle(() => {
+            this.events.off('shutdown', cancelWait);
+            this.events.off('destroy', cancelWait);
+            if (this.sys && this.scene.isActive()) this.scene.restart();
+        });
+        const cancelWait = () => unsubscribe();
+        this.events.once('shutdown', cancelWait);
+        this.events.once('destroy', cancelWait);
     }
 }
 
@@ -1241,14 +1295,31 @@ class FinalMemoryScene extends Phaser.Scene {
 
     create() {
         this.cameras.main.setBackgroundColor('#f3e5f5');
-        
-        SofiApp.audio.speak('¡Excelente Sofi! ¡Qué buena memoria!');
-        SofiApp.audio.success();
 
-        // Reward given via recordEvent in completeLevel
+        // 8D.2D.1: el sonido y la frase del final los pone SofiApp.celebration (L2) desde completeLevel.
+        // Los premios también se dan ahí (recordEvent / unlockSticker).
 
         const cx = this.scale.width / 2;
         const cy = this.scale.height / 2;
+
+        // Estallido corto de estrellas, una sola vez (sin movimiento reducido no se dibuja)
+        if (!(SofiApp.motion && SofiApp.motion.reduced)) {
+            for (let i = 0; i < 12; i++) {
+                const angle = (Math.PI * 2 * i) / 12;
+                const star = this.add.star(cx, cy - 80, 5, 8, 18, 0xffeb3b).setAlpha(0.9);
+                this.tweens.add({
+                    targets: star,
+                    x: cx + Math.cos(angle) * 260,
+                    y: cy - 80 + Math.sin(angle) * 260,
+                    alpha: 0,
+                    scale: 1.6,
+                    angle: 180,
+                    duration: 1100,
+                    ease: 'Cubic.easeOut',
+                    onComplete: () => star.destroy()
+                });
+            }
+        }
 
         const mainText = this.add.text(cx, cy - 80, '🎉 ¡Excelente Sofi! 🎉', {
             fontSize: '48px',

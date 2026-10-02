@@ -660,7 +660,20 @@ class MazeScene extends Phaser.Scene {
     create() {
         this.cameras.main.setBackgroundColor(this.theme.bg);
         this.obstacles = {};
-        
+
+        // 8D.3D.2: hold del feedback de premios de este mundo (ver la llegada a casa en handleCellClick). Si la escena
+        // se cierra con el hold activo, se suelta: el progreso ya está guardado y sus cards no pueden quedar retenidas.
+        // this.sys.events porque init() pisa this.events con los eventos del nivel.
+        this.progressRewardHold = null;
+        const sceneEvents = this.sys.events;
+        const onClose = () => {
+            sceneEvents.off('shutdown', onClose);
+            sceneEvents.off('destroy', onClose);
+            this.releaseProgressRewardHold();
+        };
+        sceneEvents.once('shutdown', onClose);
+        sceneEvents.once('destroy', onClose);
+
         const missionEmojis = new Set();
         this.mission.objectives.forEach(o => {
             missionEmojis.add(o.emoji);
@@ -946,7 +959,8 @@ class MazeScene extends Phaser.Scene {
                 this.inputLocked = false;
                 if (this.mission.introSpeech) {
                     speakMaze(this.mission.introSpeech);
-                    setTimeout(() => speakMaze(this.mission.instruction.speech), 2500);
+                    // 8D.2D.3: si Sofi ya salió del juego, la consigna no suena (antes podía sonar en otra vista)
+                    setTimeout(() => { if (this.sys && this.scene.isActive()) speakMaze(this.mission.instruction.speech); }, 2500);
                 } else {
                     speakMaze(this.mission.instruction.speech);
                 }
@@ -1296,14 +1310,29 @@ class MazeScene extends Phaser.Scene {
             if (this.isLevelCompleting) return;
             this.isLevelCompleting = true;
             this.inputLocked = true;
-            if (typeof playSuccessSound === 'function') playSuccessSound();
-            
+
+            // 8D.3D.2: Caramelo llegó a casa con la misión completa: el mundo ya está ganado. Se guarda acá (evento + ⭐;
+            // en el último, también Exploradora y Arcoíris si es el 5.º sticker), así salir antes de los 2 s no pierde
+            // nada. Las cards quedan retenidas hasta el punto de siempre.
+            const isFinalWorld = currentMazeLevel === currentMazeAdventure.length - 1;
+            if (SofiApp.progress) {
+                if (SofiApp.progress.holdRewardFeedback) this.progressRewardHold = SofiApp.progress.holdRewardFeedback();
+                SofiApp.progress.recordEvent(`maze-level-${currentMazeLevel + 1}`);
+                if (isFinalWorld) SofiApp.progress.unlockSticker('exploradora');
+            }
+
+            // Caramelo festeja local (siempre). Con movimiento reducido, sin saltitos, pulso ni partículas.
             this.setCarameloEmotion(CARAMELO_TEXTURES.celebrate);
-            
-            this.tweens.add({ targets: this.homeObj, scale: 1.3, duration: 300, yoyo: true, repeat: 1 });
-            this.tweens.add({ targets: this.dogObj, y: this.dogObj.y - 20, duration: 200, yoyo: true, repeat: 3 });
-            this.showParticles(this.homeObj.x, this.homeObj.y, '✨', 8);
-            speakMaze("¡Llegamos a casa!");
+            if (!(SofiApp.motion && SofiApp.motion.reduced)) {
+                this.tweens.add({ targets: this.homeObj, scale: 1.3, duration: 300, yoyo: true, repeat: 1 });
+                this.tweens.add({ targets: this.dogObj, y: this.dogObj.y - 20, duration: 200, yoyo: true, repeat: 3 });
+                this.showParticles(this.homeObj.x, this.homeObj.y, '✨', 8);
+            }
+            // 8D.2D.3: mundos 1-5 = L1 (cue1 + "¡Llegamos a casa!"), en lugar de playSuccessSound + speakMaze.
+            // El último mundo llega en silencio: su momento audible es el L2 de la aventura, 2 s después.
+            if (!isFinalWorld && SofiApp.celebration) {
+                SofiApp.celebration.play({ level: 1, event: 'maze.worldComplete', source: 'maze' });
+            }
             
             // Move companions to home too
             this.missionState.companions.forEach(compId => {
@@ -1314,15 +1343,47 @@ class MazeScene extends Phaser.Scene {
             });
             
             this.time.delayedCall(2000, () => {
-                if (SofiApp.progress) SofiApp.progress.recordEvent(`maze-level-${currentMazeLevel + 1}`);
+                // 8D.3D.2: el punto de siempre de las cards. Los premios ya se guardaron en la llegada; acá solo se
+                // suelta su feedback (el flush llega en el próximo tick, igual que antes).
+                this.releaseProgressRewardHold();
                 currentMazeLevel++;
-                if (currentMazeLevel < currentMazeAdventure.length) this.scene.restart();
+                if (currentMazeLevel < currentMazeAdventure.length) this.restartWhenRewardsIdle();
                 else {
-                    if (SofiApp.progress) SofiApp.progress.unlockSticker('exploradora');
+                    // 8D.2D.3: L2 en el mismo bloque síncrono que el feedback de los premios (la card de Exploradora
+                    // queda en silencio y Arcoíris, si llega, la reemplaza con L3).
+                    if (SofiApp.celebration) {
+                        SofiApp.celebration.play({ level: 2, event: 'maze.adventureComplete', source: 'maze' });
+                    }
                     this.scene.start('FinalCelebrationScene');
                 }
             });
         }
+    }
+
+    // 8D.3D.2: suelta el hold de este mundo (idempotente; si la navegación ya lo soltó, el core devuelve false).
+    releaseProgressRewardHold() {
+        const hold = this.progressRewardHold;
+        this.progressRewardHold = null;
+        if (hold && SofiApp.progress && SofiApp.progress.releaseRewardFeedback) SofiApp.progress.releaseRewardFeedback(hold);
+    }
+
+    // 8D.2D.3: la intro del mundo siguiente no arranca debajo de la card de estrella. Sin card (rejugar),
+    // sigue igual que antes. Usa this.sys.events porque init() pisa this.events con los eventos del nivel.
+    // Si la escena se cierra mientras espera, no revive.
+    restartWhenRewardsIdle() {
+        if (!SofiApp.rewards || !SofiApp.rewards.isBusy()) {
+            this.scene.restart();
+            return;
+        }
+        const sceneEvents = this.sys.events;
+        const unsubscribe = SofiApp.rewards.whenIdle(() => {
+            sceneEvents.off('shutdown', cancelWait);
+            sceneEvents.off('destroy', cancelWait);
+            if (this.sys && this.scene.isActive()) this.scene.restart();
+        });
+        const cancelWait = () => unsubscribe();
+        sceneEvents.once('shutdown', cancelWait);
+        sceneEvents.once('destroy', cancelWait);
     }
 
     getBlockedCells() {
@@ -1404,18 +1465,20 @@ class FinalCelebrationScene extends Phaser.Scene {
         
         const dog = this.add.text(cx - 100, cy + 100, '🐶', { fontSize: '100px' }).setOrigin(0.5);
         const home = this.add.text(cx + 100, cy + 100, '🏠', { fontSize: '120px' }).setOrigin(0.5);
-        this.tweens.add({ targets: [dog, home], y: cy + 50, duration: 500, yoyo: true, repeat: -1 });
-        
-        this.time.addEvent({
-            delay: 300, loop: true,
-            callback: () => {
-                const emojis = ['⭐', '❤️', '🎉', '🦴', '🌈', '✨', '🔑', '🐰', '🌷', '🌉'];
-                const p = this.add.text(Phaser.Math.Between(50, 750), 950, Phaser.Math.RND.pick(emojis), { fontSize: '40px' }).setOrigin(0.5);
-                this.tweens.add({ targets: p, y: -50, x: p.x + Phaser.Math.Between(-100, 100), duration: 3000, angle: 360, onComplete: () => p.destroy() });
-            }
-        });
-        
-        speakMaze("¡Muy bien Sofi! ¡Terminaste la aventura!");
+        // 8D.2D.3: el sonido y la frase del final los pone SofiApp.celebration (L2) desde la llegada.
+        // Con movimiento reducido la escena queda fija: sin saltitos ni lluvia de emojis.
+        if (!(SofiApp.motion && SofiApp.motion.reduced)) {
+            this.tweens.add({ targets: [dog, home], y: cy + 50, duration: 500, yoyo: true, repeat: -1 });
+
+            this.time.addEvent({
+                delay: 300, loop: true,
+                callback: () => {
+                    const emojis = ['⭐', '❤️', '🎉', '🦴', '🌈', '✨', '🔑', '🐰', '🌷', '🌉'];
+                    const p = this.add.text(Phaser.Math.Between(50, 750), 950, Phaser.Math.RND.pick(emojis), { fontSize: '40px' }).setOrigin(0.5);
+                    this.tweens.add({ targets: p, y: -50, x: p.x + Phaser.Math.Between(-100, 100), duration: 3000, angle: 360, onComplete: () => p.destroy() });
+                }
+            });
+        }
         
         const btnBg = this.add.rectangle(cx, cy + 250, 300, 80, 0x4caf50, 1).setInteractive({ useHandCursor: true });
         btnBg.setStrokeStyle(4, 0xffffff);
